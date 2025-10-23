@@ -1,0 +1,214 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/storage_config.dart';
+import '../models/favorite_song.dart';
+
+/// Supabase 数据库服务
+class SupabaseService {
+  static final SupabaseService _instance = SupabaseService._internal();
+  SupabaseClient? _client;
+  bool _initialized = false;
+
+  factory SupabaseService() => _instance;
+
+  SupabaseService._internal();
+
+  /// 初始化 Supabase
+  Future<bool> initialize(StorageConfig config) async {
+    if (!config.isValid) {
+      print('Supabase 配置无效');
+      return false;
+    }
+
+    try {
+      await Supabase.initialize(
+        url: config.supabaseUrl,
+        anonKey: config.supabaseAnonKey,
+      );
+      _client = Supabase.instance.client;
+      _initialized = true;
+      
+      // 确保表存在
+      await _ensureTableExists();
+      
+      return true;
+    } catch (e) {
+      print('初始化 Supabase 失败: $e');
+      _initialized = false;
+      return false;
+    }
+  }
+
+  /// 确保收藏表存在（如果不存在则创建）
+  Future<void> _ensureTableExists() async {
+    if (_client == null) return;
+
+    try {
+      // 尝试查询表，如果失败说明表不存在
+      await _client!.from('favorite_songs').select().limit(1);
+    } catch (e) {
+      print('收藏表可能不存在，请在 Supabase 中手动创建表');
+      print('建议的表结构：');
+      print('''
+CREATE TABLE favorite_songs (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  artist TEXT NOT NULL,
+  album TEXT,
+  cover_url TEXT,
+  local_audio_path TEXT,
+  local_cover_path TEXT,
+  r2_audio_url TEXT,
+  r2_cover_url TEXT,
+  duration INTEGER,
+  platform TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  synced_at TIMESTAMP WITH TIME ZONE,
+  user_id UUID REFERENCES auth.users(id)
+);
+
+-- 创建索引
+CREATE INDEX idx_favorite_songs_user_id ON favorite_songs(user_id);
+CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
+      ''');
+    }
+  }
+
+  /// 检查是否已初始化
+  bool get isInitialized => _initialized && _client != null;
+
+  /// 添加收藏歌曲
+  Future<bool> addFavorite(FavoriteSong song) async {
+    if (!isInitialized) {
+      print('Supabase 未初始化');
+      return false;
+    }
+
+    try {
+      await _client!.from('favorite_songs').upsert(song.toJson());
+      return true;
+    } catch (e) {
+      print('添加收藏失败: $e');
+      return false;
+    }
+  }
+
+  /// 删除收藏歌曲
+  Future<bool> removeFavorite(String songId) async {
+    if (!isInitialized) {
+      print('Supabase 未初始化');
+      return false;
+    }
+
+    try {
+      await _client!.from('favorite_songs').delete().eq('id', songId);
+      return true;
+    } catch (e) {
+      print('删除收藏失败: $e');
+      return false;
+    }
+  }
+
+  /// 获取所有收藏歌曲
+  Future<List<FavoriteSong>> getFavorites() async {
+    if (!isInitialized) {
+      print('❌ Supabase 未初始化');
+      return [];
+    }
+
+    try {
+      print('🔍 正在从 Supabase 获取收藏列表...');
+      final response = await _client!
+          .from('favorite_songs')
+          .select()
+          .order('created_at', ascending: false);
+
+      final favorites = (response as List)
+          .map((json) => FavoriteSong.fromJson(json))
+          .toList();
+      
+      print('✅ 从 Supabase 获取到 ${favorites.length} 首歌曲');
+      return favorites;
+    } catch (e) {
+      print('❌ 获取收藏列表失败: $e');
+      return [];
+    }
+  }
+
+  /// 检查歌曲是否已收藏
+  Future<bool> isFavorite(String songId) async {
+    if (!isInitialized) {
+      return false;
+    }
+
+    try {
+      final response = await _client!
+          .from('favorite_songs')
+          .select()
+          .eq('id', songId)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e) {
+      print('检查收藏状态失败: $e');
+      return false;
+    }
+  }
+
+  /// 更新收藏歌曲信息
+  Future<bool> updateFavorite(FavoriteSong song) async {
+    if (!isInitialized) {
+      print('Supabase 未初始化');
+      return false;
+    }
+
+    try {
+      await _client!
+          .from('favorite_songs')
+          .update(song.toJson())
+          .eq('id', song.id);
+      return true;
+    } catch (e) {
+      print('更新收藏失败: $e');
+      return false;
+    }
+  }
+
+  /// 批量同步收藏
+  Future<bool> syncFavorites(List<FavoriteSong> songs) async {
+    if (!isInitialized) {
+      print('Supabase 未初始化');
+      return false;
+    }
+
+    try {
+      final jsonList = songs.map((s) => s.toJson()).toList();
+      await _client!.from('favorite_songs').upsert(jsonList);
+      return true;
+    } catch (e) {
+      print('批量同步收藏失败: $e');
+      return false;
+    }
+  }
+
+  /// 清除所有收藏
+  Future<bool> clearAllFavorites() async {
+    if (!isInitialized) {
+      print('Supabase 未初始化');
+      return false;
+    }
+
+    try {
+      await _client!.from('favorite_songs').delete().neq('id', '');
+      return true;
+    } catch (e) {
+      print('清除收藏失败: $e');
+      return false;
+    }
+  }
+
+  /// 关闭连接
+  void dispose() {
+    _client = null;
+    _initialized = false;
+  }
+}

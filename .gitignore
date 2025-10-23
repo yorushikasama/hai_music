@@ -1,0 +1,46 @@
+### Flutter / Dart ###
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+### Build outputs ###
+build/
+coverage/
+
+### Android ###
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/**/*.keystore
+android/app/**/*.jks
+
+### iOS (not in repo but safe) ###
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+
+### macOS (safe) ###
+macos/Flutter/ephemeral/
+
+### Windows ###
+windows/runner/Release/
+windows/runner/Debug/
+
+### Web ###
+web/.dart_tool/
+
+### IDE ###
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+### System ###
+.DS_Store
+Thumbs.db
+*.log
