@@ -12,7 +12,7 @@ extension FavoriteSongExtension on FavoriteSong {
       album: album,
       coverUrl: r2CoverUrl ?? coverUrl,
       audioUrl: r2AudioUrl ?? '',
-      duration: Duration(seconds: duration),
+      duration: duration,
       platform: platform,
       r2CoverUrl: r2CoverUrl,
       lyricsLrc: lyricsLrc, // 包含歌词

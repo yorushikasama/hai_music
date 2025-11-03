@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
@@ -37,23 +38,73 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   bool _hasMoreData = true;
   int _totalCount = 0;
   List<Song> _allSongs = [];
+  List<Song> _filteredSongs = []; // 搜索过滤后的歌曲
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearching = false;
+  
+  // 自动加载相关
+  Timer? _autoLoadTimer;
+  int _autoLoadInterval = 3; // 每3秒自动加载一次
 
   @override
   void initState() {
     super.initState();
     _allSongs = List.from(widget.playlist.songs);
+    _filteredSongs = List.from(_allSongs);
     _totalCount = widget.totalCount;
     _scrollController.addListener(_onScroll);
+    
     // 检查是否还有更多数据
     if (_allSongs.length >= _totalCount) {
       _hasMoreData = false;
+    } else {
+      // 启动自动加载
+      _startAutoLoad();
     }
+    
+    _searchController.addListener(_onSearchChanged);
+  }
+  
+  void _startAutoLoad() {
+    if (!_hasMoreData) return;
+    
+    _autoLoadTimer = Timer.periodic(Duration(seconds: _autoLoadInterval), (timer) {
+      if (!mounted || !_hasMoreData || _isLoadingMore) {
+        timer.cancel();
+        return;
+      }
+      _loadMoreSongs();
+    });
+  }
+  
+  void _stopAutoLoad() {
+    _autoLoadTimer?.cancel();
+    _autoLoadTimer = null;
+  }
+  
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredSongs = List.from(_allSongs);
+        _isSearching = false;
+      } else {
+        _isSearching = true;
+        _filteredSongs = _allSongs.where((song) {
+          return song.title.toLowerCase().contains(query) ||
+                 song.artist.toLowerCase().contains(query) ||
+                 (song.album?.toLowerCase().contains(query) ?? false);
+        }).toList();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _stopAutoLoad(); // 停止自动加载
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -91,9 +142,17 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
           _totalCount = totalCount;
           _isLoadingMore = false;
           
+          // 更新过滤列表
+          if (_isSearching) {
+            _onSearchChanged();
+          } else {
+            _filteredSongs = List.from(_allSongs);
+          }
+          
           // 检查是否还有更多数据
           if (_allSongs.length >= _totalCount || newSongs.isEmpty) {
             _hasMoreData = false;
+            _stopAutoLoad(); // 停止自动加载
           }
         });
       }
@@ -107,7 +166,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 
   List<Song> get _displayedSongs {
-    return _allSongs;
+    return _filteredSongs;
   }
 
   @override
@@ -303,6 +362,65 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               ),
             ),
           ),
+          // 搜索框
+          SliverToBoxAdapter(
+            child: Container(
+              color: colors.background,
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(color: colors.textPrimary),
+                decoration: InputDecoration(
+                  hintText: '搜索歌曲、歌手、专辑...',
+                  hintStyle: TextStyle(color: colors.textSecondary),
+                  prefixIcon: Icon(Icons.search, color: colors.textSecondary),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, color: colors.textSecondary),
+                          onPressed: () {
+                            _searchController.clear();
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: colors.card,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ),
+          ),
+          // 加载状态提示
+          if (_autoLoadTimer != null && _hasMoreData)
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(colors.textSecondary),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '正在自动加载更多歌曲... (${_allSongs.length}/$_totalCount)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {

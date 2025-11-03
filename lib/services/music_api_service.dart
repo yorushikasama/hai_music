@@ -62,9 +62,9 @@ class MusicApiService {
     }
   }
   
-  /// 解析时长字符串（如 "3分30秒" -> Duration）
-  Duration _parseDuration(String? interval) {
-    if (interval == null || interval.isEmpty) return Duration.zero;
+  /// 解析时长字符串（如 "3分30秒" -> 秒数）
+  int? _parseDuration(String? interval) {
+    if (interval == null || interval.isEmpty) return null;
     
     try {
       // 匹配 "3分30秒" 格式
@@ -74,9 +74,9 @@ class MusicApiService {
       final minutes = minuteMatch != null ? int.parse(minuteMatch.group(1)!) : 0;
       final seconds = secondMatch != null ? int.parse(secondMatch.group(1)!) : 0;
       
-      return Duration(minutes: minutes, seconds: seconds);
+      return minutes * 60 + seconds;
     } catch (e) {
-      return Duration.zero;
+      return null;
     }
   }
   
@@ -436,7 +436,7 @@ class MusicApiService {
               album: item['album'] ?? '未知专辑',
               coverUrl: item['cover'] ?? '',
               audioUrl: '', // 播放时再获取
-              duration: Duration.zero, // 歌单不显示时长，播放时会获取真实时长
+              duration: null, // 歌单不显示时长，播放时会获取真实时长
               platform: 'qq',
             );
           }).toList();

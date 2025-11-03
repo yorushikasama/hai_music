@@ -103,23 +103,28 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         selectedPlaylists.add(playlistsCopy.removeAt(index));
       }
       
-      // 从选中的歌单中获取歌曲
-      for (final playlist in selectedPlaylists) {
-        try {
-          final result = await _apiService.getPlaylistSongs(
-            playlistId: playlist.id,
-            page: 1,
-            num: 30,
-          );
-          
-          final List<Song> songs = result['songs'] as List<Song>;
-          if (songs.isNotEmpty) {
-            allSongs.addAll(songs);
-          }
-        } catch (e) {
-          continue;
+      // 并行获取所有歌单的歌曲（性能优化）
+      print('🚀 并行加载 ${selectedPlaylists.length} 个歌单...');
+      final futures = selectedPlaylists.map((playlist) => 
+        _apiService.getPlaylistSongs(
+          playlistId: playlist.id,
+          page: 1,
+          num: 30,
+        ).then((result) => result['songs'] as List<Song>)
+         .catchError((e) {
+          print('⚠️ 加载歌单失败: ${playlist.title}');
+          return <Song>[];
+        })
+      ).toList();
+
+      final songLists = await Future.wait(futures);
+      
+      for (final songs in songLists) {
+        if (songs.isNotEmpty) {
+          allSongs.addAll(songs);
         }
       }
+      print('✅ 并行加载完成，共获取 ${allSongs.length} 首歌曲');
       
       // 从所有歌曲中随机选择20首
       if (allSongs.isNotEmpty) {
@@ -171,7 +176,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           album: parts[3],
           coverUrl: parts[4],
           audioUrl: '',
-          duration: const Duration(minutes: 3),
+          duration: 180, // 3分钟
           platform: 'qq',
         );
       }

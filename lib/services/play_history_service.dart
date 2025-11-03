@@ -24,7 +24,7 @@ class PlayHistoryService {
         artist: song.artist,
         album: song.album,
         coverUrl: song.coverUrl,
-        duration: song.duration.inSeconds,
+        duration: song.duration,
         platform: song.platform,
         playedAt: DateTime.now(),
       );

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 允许所有HTTP和HTTPS连接 -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- 允许特定域名的明文流量 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">music.ysnight.cn</domain>
+        <domain includeSubdomains="true">y.qq.com</domain>
+        <domain includeSubdomains="true">i.y.qq.com</domain>
+        <domain includeSubdomains="true">u.y.qq.com</domain>
+        <domain includeSubdomains="true">c.y.qq.com</domain>
+        <domain includeSubdomains="true">ws.stream.qqmusic.qq.com</domain>
+        <domain includeSubdomains="true">isure.stream.qqmusic.qq.com</domain>
+        <domain includeSubdomains="true">dl.stream.qqmusic.qq.com</domain>
+    </domain-config>
+</network-security-config>

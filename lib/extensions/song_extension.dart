@@ -4,8 +4,9 @@ import '../models/song.dart';
 extension SongExtension on Song {
   /// 格式化时长为 "mm:ss" 格式
   String get formattedDuration {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds % 60;
+    if (duration == null) return '00:00';
+    final minutes = duration! ~/ 60;
+    final seconds = duration! % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
@@ -43,7 +44,7 @@ extension SongExtension on Song {
     String? album,
     String? coverUrl,
     String? audioUrl,
-    Duration? duration,
+    int? duration,
     String? platform,
     String? r2CoverUrl,
     String? lyricsLrc,
@@ -85,19 +86,19 @@ extension SongListExtension on List<Song> {
   /// 按时长排序
   List<Song> sortByDuration() {
     final sorted = List<Song>.from(this);
-    sorted.sort((a, b) => a.duration.compareTo(b.duration));
+    sorted.sort((a, b) => (a.duration ?? 0).compareTo(b.duration ?? 0));
     return sorted;
   }
 
-  /// 获取总时长
-  Duration get totalDuration {
-    return fold(Duration.zero, (total, song) => total + song.duration);
+  /// 获取总时长（秒）
+  int get totalDuration {
+    return fold(0, (total, song) => total + (song.duration ?? 0));
   }
 
   /// 格式化总时长
   String get formattedTotalDuration {
-    final hours = totalDuration.inHours;
-    final minutes = totalDuration.inMinutes % 60;
+    final hours = totalDuration ~/ 3600;
+    final minutes = (totalDuration % 3600) ~/ 60;
     if (hours > 0) {
       return '$hours小时$minutes分钟';
     }

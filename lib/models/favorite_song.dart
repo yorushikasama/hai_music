@@ -9,7 +9,7 @@ class FavoriteSong {
   final String? localCoverPath; // 本地封面文件路径
   final String? r2AudioUrl; // R2存储的音频URL
   final String? r2CoverUrl; // R2存储的封面URL
-  final int duration; // 时长（秒）
+  final int? duration; // 时长（秒）
   final String? platform; // 来源平台
   final String? lyricsLrc; // LRC 格式歌词
   final DateTime createdAt; // 收藏时间
@@ -25,7 +25,7 @@ class FavoriteSong {
     this.localCoverPath,
     this.r2AudioUrl,
     this.r2CoverUrl,
-    required this.duration,
+    this.duration,
     this.platform,
     this.lyricsLrc,
     DateTime? createdAt,

@@ -1,6 +1,12 @@
 @echo off
-chcp 65001 >nul
 echo ========================================
 echo Starting Android Version
 echo ========================================
-flutter run -d emulator-5554
+echo.
+echo Checking devices...
+flutter devices
+echo.
+echo ========================================
+echo Starting app...
+echo ========================================
+flutter run

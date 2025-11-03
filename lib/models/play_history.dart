@@ -5,7 +5,7 @@ class PlayHistory {
   final String artist;
   final String album;
   final String coverUrl;
-  final int duration; // 时长（秒）
+  final int? duration; // 时长（秒）
   final String? platform;
   final DateTime playedAt; // 播放时间
 
@@ -15,7 +15,7 @@ class PlayHistory {
     required this.artist,
     required this.album,
     required this.coverUrl,
-    required this.duration,
+    this.duration,
     this.platform,
     DateTime? playedAt,
   }) : playedAt = playedAt ?? DateTime.now();

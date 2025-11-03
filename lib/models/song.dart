@@ -5,7 +5,7 @@ class Song {
   final String album;
   final String coverUrl;
   final String audioUrl;
-  final Duration duration;
+  final int? duration; // 时长（秒）
   final String? platform; // 音乐平台：netease, qq, kugou等
   final String? r2CoverUrl; // R2对象存储的封面URL
   final String? lyricsLrc; // LRC 格式歌词
@@ -14,10 +14,10 @@ class Song {
     required this.id,
     required this.title,
     required this.artist,
-    required this.album,
-    required this.coverUrl,
-    required this.audioUrl,
-    required this.duration,
+    this.album = '',
+    this.coverUrl = '',
+    this.audioUrl = '',
+    this.duration,
     this.platform,
     this.r2CoverUrl,
     this.lyricsLrc,
@@ -31,7 +31,7 @@ class Song {
       album: json['album'] ?? '',
       coverUrl: json['coverUrl'] ?? '',
       audioUrl: json['audioUrl'] ?? '',
-      duration: Duration(seconds: json['duration'] ?? 0),
+      duration: json['duration'] as int?,
       platform: json['platform'],
       r2CoverUrl: json['r2CoverUrl'],
       lyricsLrc: json['lyricsLrc'],
@@ -56,8 +56,8 @@ class Song {
       artist: json['artist']?.toString().split(',').first ?? '',
       album: json['album'] ?? '',
       coverUrl: json['pic'] ?? json['cover'] ?? '',
-      audioUrl: json['url'],
-      duration: Duration(seconds: durationSeconds),
+      audioUrl: json['url'] ?? '',
+      duration: durationSeconds,
       platform: platform,
     );
   }
@@ -70,7 +70,7 @@ class Song {
       'album': album,
       'coverUrl': coverUrl,
       'audioUrl': audioUrl,
-      'duration': duration?.inSeconds,
+      'duration': duration,
       'platform': platform,
       'r2CoverUrl': r2CoverUrl,
       'lyricsLrc': lyricsLrc,
@@ -86,7 +86,7 @@ class Song {
         album: '十一月的萧邦',
         coverUrl: 'https://picsum.photos/400/400?random=1',
         audioUrl: '',
-        duration: const Duration(minutes: 3, seconds: 45),
+        duration: 225,
       ),
       Song(
         id: '2',
@@ -95,7 +95,7 @@ class Song {
         album: '叶惠美',
         coverUrl: 'https://picsum.photos/400/400?random=2',
         audioUrl: '',
-        duration: const Duration(minutes: 4, seconds: 28),
+        duration: 268,
       ),
       Song(
         id: '3',
@@ -104,7 +104,7 @@ class Song {
         album: '七里香',
         coverUrl: 'https://picsum.photos/400/400?random=3',
         audioUrl: '',
-        duration: const Duration(minutes: 5, seconds: 2),
+        duration: 302,
       ),
       Song(
         id: '4',
@@ -113,7 +113,7 @@ class Song {
         album: '魔杰座',
         coverUrl: 'https://picsum.photos/400/400?random=4',
         audioUrl: '',
-        duration: const Duration(minutes: 3, seconds: 43),
+        duration: 223,
       ),
       Song(
         id: '5',
@@ -122,7 +122,7 @@ class Song {
         album: '我很忙',
         coverUrl: 'https://picsum.photos/400/400?random=5',
         audioUrl: '',
-        duration: const Duration(minutes: 3, seconds: 58),
+        duration: 238,
       ),
       Song(
         id: '6',
@@ -131,7 +131,7 @@ class Song {
         album: '周杰伦的床边故事',
         coverUrl: 'https://picsum.photos/400/400?random=6',
         audioUrl: '',
-        duration: const Duration(minutes: 3, seconds: 35),
+        duration: 215,
       ),
       Song(
         id: '7',
@@ -140,7 +140,7 @@ class Song {
         album: '最伟大的作品',
         coverUrl: 'https://picsum.photos/400/400?random=7',
         audioUrl: '',
-        duration: const Duration(minutes: 4, seconds: 15),
+        duration: 255,
       ),
       Song(
         id: '8',
@@ -149,7 +149,7 @@ class Song {
         album: '范特西',
         coverUrl: 'https://picsum.photos/400/400?random=8',
         audioUrl: '',
-        duration: const Duration(minutes: 4, seconds: 30),
+        duration: 270,
       ),
     ];
   }

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
 import '../models/song.dart';
 import '../models/favorite_song.dart';
 import '../models/storage_config.dart';
@@ -95,7 +95,7 @@ class FavoriteManagerService {
           artist: song.artist,
           album: song.album,
           coverUrl: song.coverUrl,
-          duration: song.duration.inSeconds,
+          duration: song.duration,
           platform: song.platform,
           lyricsLrc: lyricsLrc,
           syncedAt: DateTime.now(),
@@ -137,7 +137,7 @@ class FavoriteManagerService {
       print('下载完成 - 音频: ${audioFile != null}, 封面: ${coverFile != null}');
 
       // 3. 获取真实时长（从音频文件）
-      int durationSeconds = song.duration.inSeconds;
+      int durationSeconds = song.duration ?? 0;
       if (audioFile != null && durationSeconds == 0) {
         durationSeconds = await _getAudioDuration(audioFile);
         print('从音频文件获取时长: $durationSeconds 秒');
@@ -264,26 +264,21 @@ class FavoriteManagerService {
     AudioPlayer? player;
     try {
       player = AudioPlayer();
-      await player.setSourceDeviceFile(audioFile.path);
+      await player.setFilePath(audioFile.path);
       
-      // 使用 Completer 等待时长
-      final completer = Completer<Duration>();
-      final subscription = player.onDurationChanged.listen((d) {
-        if (!completer.isCompleted) {
-          completer.complete(d);
-        }
-      });
-      
-      // 等待最多3秒
-      final duration = await completer.future.timeout(
-        Duration(seconds: AppConstants.audioDurationTimeout),
-        onTimeout: () => Duration.zero,
-      );
-      
-      await subscription.cancel();
-      await player.dispose();
-      
-      return duration.inSeconds;
+      // 等待时长加载
+      final durationFuture = player.durationFuture;
+      if (durationFuture != null) {
+        final duration = await durationFuture.timeout(
+          Duration(seconds: AppConstants.audioDurationTimeout),
+          onTimeout: () => null,
+        );
+        await player.dispose();
+        return duration?.inSeconds ?? 0;
+      } else {
+        await player.dispose();
+        return 0;
+      }
     } catch (e) {
       print('获取音频时长失败: $e');
       await player?.dispose();

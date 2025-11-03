@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/storage_config.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
+import '../services/clipboard_config_parser.dart';
 
 /// 存储配置界面
 class StorageConfigScreen extends StatefulWidget {
@@ -79,6 +81,99 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
     super.dispose();
   }
 
+  Future<void> _importFromClipboard() async {
+    try {
+      // 读取粘贴板内容
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData == null || clipboardData.text == null || clipboardData.text!.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('粘贴板为空'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      final clipboardText = clipboardData.text!;
+      
+      // 验证配置格式
+      if (!ClipboardConfigParser.validateConfigText(clipboardText)) {
+        if (mounted) {
+          _showImportHelpDialog();
+        }
+        return;
+      }
+
+      // 解析配置
+      final config = ClipboardConfigParser.parseConfig(clipboardText);
+      if (config == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('无法解析配置，请检查格式'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // 填充到输入框
+      setState(() {
+        _supabaseUrlController.text = config.supabaseUrl;
+        _supabaseKeyController.text = config.supabaseAnonKey;
+        _r2EndpointController.text = config.r2Endpoint;
+        _r2AccessKeyController.text = config.r2AccessKey;
+        _r2SecretKeyController.text = config.r2SecretKey;
+        _r2BucketController.text = config.r2BucketName;
+        _r2RegionController.text = config.r2Region;
+        _r2CustomDomainController.text = config.r2CustomDomain ?? '';
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ 配置导入成功！请检查后保存'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showImportHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('配置格式说明'),
+        content: SingleChildScrollView(
+          child: Text(
+            ClipboardConfigParser.generateExample(),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _saveConfig() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -150,7 +245,12 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 ),
               ),
             )
-          else
+          else ...[
+            IconButton(
+              icon: Icon(Icons.content_paste, color: colors.accent),
+              onPressed: _importFromClipboard,
+              tooltip: '从粘贴板导入',
+            ),
             TextButton(
               onPressed: _saveConfig,
               child: Text(
@@ -162,6 +262,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 ),
               ),
             ),
+          ],
         ],
       ),
       body: Form(

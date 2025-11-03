@@ -17,12 +17,39 @@ class RecentPlayScreen extends StatefulWidget {
 
 class _RecentPlayScreenState extends State<RecentPlayScreen> {
   List<PlayHistory> _history = [];
+  List<PlayHistory> _filteredHistory = [];
   bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearching = false;
 
   @override
   void initState() {
     super.initState();
     _loadHistory();
+    _searchController.addListener(_onSearchChanged);
+  }
+  
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+  
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredHistory = List.from(_history);
+        _isSearching = false;
+      } else {
+        _isSearching = true;
+        _filteredHistory = _history.where((item) {
+          return item.title.toLowerCase().contains(query) ||
+                 item.artist.toLowerCase().contains(query) ||
+                 item.album.toLowerCase().contains(query);
+        }).toList();
+      }
+    });
   }
 
   Future<void> _loadHistory() async {
@@ -34,6 +61,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
     if (mounted) {
       setState(() {
         _history = history;
+        _filteredHistory = List.from(history);
         _isLoading = false;
       });
     }
@@ -132,6 +160,35 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
               ],
             ),
           ),
+          // 搜索框
+          if (_history.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(color: colors.textPrimary),
+                decoration: InputDecoration(
+                  hintText: '搜索历史记录...',
+                  hintStyle: TextStyle(color: colors.textSecondary),
+                  prefixIcon: Icon(Icons.search, color: colors.textSecondary),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, color: colors.textSecondary),
+                          onPressed: () {
+                            _searchController.clear();
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: colors.card,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ),
           // 内容区域
           Expanded(
             child: _isLoading
@@ -180,11 +237,29 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
   }
 
   Widget _buildHistoryList(ThemeColors colors, MusicProvider musicProvider) {
+    final displayList = _filteredHistory;
+    
+    if (displayList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 64, color: colors.textSecondary.withOpacity(0.5)),
+            SizedBox(height: 16),
+            Text(
+              '没有找到匹配的记录',
+              style: TextStyle(color: colors.textSecondary, fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
+    
     return ListView.builder(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      itemCount: _history.length,
+      itemCount: displayList.length,
       itemBuilder: (context, index) {
-        final history = _history[index];
+        final history = displayList[index];
         final isPlaying = musicProvider.currentSong?.id == history.id;
         
         return Padding(
@@ -233,7 +308,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
               album: history.album,
               coverUrl: history.coverUrl,
               audioUrl: '',
-              duration: Duration(seconds: history.duration),
+              duration: history.duration,
               platform: history.platform,
             );
             

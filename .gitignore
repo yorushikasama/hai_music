@@ -44,3 +44,9 @@ web/.dart_tool/
 .DS_Store
 Thumbs.db
 *.log
+
+### Sensitive Config ###
+test_config.txt
+*_config.txt
+*.key
+*.secret

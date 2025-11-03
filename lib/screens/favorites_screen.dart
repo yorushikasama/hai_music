@@ -21,12 +21,36 @@ class FavoritesScreen extends StatefulWidget {
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
   List<FavoriteSong> _favorites = [];
+  List<FavoriteSong> _filteredFavorites = [];
   bool _isLoading = true;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadFavorites();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _filterFavorites(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredFavorites = _favorites;
+      } else {
+        _filteredFavorites = _favorites.where((song) {
+          final titleMatch = song.title.toLowerCase().contains(query.toLowerCase());
+          final artistMatch = song.artist.toLowerCase().contains(query.toLowerCase());
+          final albumMatch = song.album.toLowerCase().contains(query.toLowerCase());
+          return titleMatch || artistMatch || albumMatch;
+        }).toList();
+      }
+    });
   }
 
   Future<void> _loadFavorites() async {
@@ -44,6 +68,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     if (mounted) {
       setState(() {
         _favorites = favorites;
+        _filteredFavorites = favorites;
         _isLoading = false;
       });
     }
@@ -70,37 +95,67 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   icon: Icon(Icons.arrow_back_ios_new, color: colors.textPrimary, size: 20),
                   onPressed: () => Navigator.pop(context),
                 ),
-                title: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onPanStart: !kIsWeb ? (_) {
-                    try {
-                      appWindow.startDragging();
-                    } catch (e) {
-                      // 桌面平台支持窗口拖动
-                    }
-                  } : null,
-                  child: Row(
-                    children: [
-                      Icon(Icons.favorite, color: Colors.red, size: 26),
-                      SizedBox(width: 12),
-                      Text(
-                        '我喜欢',
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                title: _isSearching
+                    ? TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        style: TextStyle(color: colors.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: '搜索歌曲、歌手、专辑...',
+                          hintStyle: TextStyle(color: colors.textSecondary),
+                          border: InputBorder.none,
+                        ),
+                        onChanged: _filterFavorites,
+                      )
+                    : GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onPanStart: !kIsWeb ? (_) {
+                          try {
+                            appWindow.startDragging();
+                          } catch (e) {
+                            // 桌面平台支持窗口拖动
+                          }
+                        } : null,
+                        child: Row(
+                          children: [
+                            Icon(Icons.favorite, color: Colors.red, size: 26),
+                            SizedBox(width: 12),
+                            Text(
+                              '我喜欢',
+                              style: TextStyle(
+                                color: colors.textPrimary,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
                 actions: [
                   IconButton(
-                    icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
-                    onPressed: _loadFavorites,
-                    tooltip: '刷新',
+                    icon: Icon(
+                      _isSearching ? Icons.close : Icons.search,
+                      color: colors.textSecondary,
+                      size: 22,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isSearching = !_isSearching;
+                        if (!_isSearching) {
+                          _searchController.clear();
+                          _filteredFavorites = _favorites;
+                        }
+                      });
+                    },
+                    tooltip: _isSearching ? '关闭搜索' : '搜索',
                   ),
+                  if (!_isSearching)
+                    IconButton(
+                      icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
+                      onPressed: _loadFavorites,
+                      tooltip: '刷新',
+                    ),
                 ],
               ),
               // 内容区域
@@ -110,7 +165,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         child: CircularProgressIndicator(color: colors.accent),
                       ),
                     )
-                  : _favorites.isEmpty
+                  : _filteredFavorites.isEmpty
                       ? SliverFillRemaining(
                           child: _buildEmptyState(colors),
                         )
@@ -131,18 +186,20 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Widget _buildEmptyState(ThemeColors colors) {
+    final isSearchEmpty = _isSearching && _searchController.text.isNotEmpty;
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.favorite_border,
+            isSearchEmpty ? Icons.search_off : Icons.favorite_border,
             size: 80,
             color: colors.textSecondary.withOpacity(0.5),
           ),
           SizedBox(height: AppStyles.spacingL),
           Text(
-            '还没有收藏的歌曲',
+            isSearchEmpty ? '未找到相关歌曲' : '还没有收藏的歌曲',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -151,7 +208,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           ),
           SizedBox(height: AppStyles.spacingS),
           Text(
-            '点击歌曲的爱心按钮收藏喜欢的音乐',
+            isSearchEmpty 
+                ? '试试其他关键词吧' 
+                : '点击歌曲的爱心按钮收藏喜欢的音乐',
             style: TextStyle(
               fontSize: 14,
               color: colors.textSecondary,
@@ -171,7 +230,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
-            final favorite = _favorites[index];
+            final favorite = _filteredFavorites[index];
             final isPlaying = musicProvider.currentSong?.id == favorite.id;
             
             return Padding(
@@ -179,7 +238,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               child: _buildSongItem(favorite, isPlaying, colors, musicProvider),
             );
           },
-          childCount: _favorites.length,
+          childCount: _filteredFavorites.length,
         ),
       ),
     );
@@ -300,7 +359,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 SizedBox(width: 12),
                 // 时长
                 Text(
-                  _formatDuration(Duration(seconds: favorite.duration)),
+                  _formatDuration(favorite.duration),
                   style: TextStyle(
                     fontSize: 13,
                     color: colors.textSecondary.withOpacity(0.6),
@@ -371,10 +430,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     );
   }
 
-  String _formatDuration(Duration duration) {
+  String _formatDuration(int? durationSeconds) {
+    if (durationSeconds == null) return '00:00';
     String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    final minutes = twoDigits((durationSeconds ~/ 60) % 60);
+    final seconds = twoDigits(durationSeconds % 60);
     return '$minutes:$seconds';
   }
 }
