@@ -11,6 +11,7 @@ class FavoriteSong {
   final String? r2CoverUrl; // R2存储的封面URL
   final int duration; // 时长（秒）
   final String? platform; // 来源平台
+  final String? lyricsLrc; // LRC 格式歌词
   final DateTime createdAt; // 收藏时间
   final DateTime? syncedAt; // 最后同步时间
 
@@ -26,6 +27,7 @@ class FavoriteSong {
     this.r2CoverUrl,
     required this.duration,
     this.platform,
+    this.lyricsLrc,
     DateTime? createdAt,
     this.syncedAt,
   }) : createdAt = createdAt ?? DateTime.now();
@@ -43,6 +45,7 @@ class FavoriteSong {
       r2CoverUrl: json['r2_cover_url'],
       duration: json['duration'] ?? 0,
       platform: json['platform'],
+      lyricsLrc: json['lyrics_lrc'],
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at']) 
           : DateTime.now(),
@@ -65,6 +68,7 @@ class FavoriteSong {
       'r2_cover_url': r2CoverUrl,
       'duration': duration,
       'platform': platform,
+      'lyrics_lrc': lyricsLrc,
       'sync_status': 'synced',
       'play_count': 0,
       'created_at': createdAt.toIso8601String(),
@@ -84,6 +88,7 @@ class FavoriteSong {
     String? r2CoverUrl,
     int? duration,
     String? platform,
+    String? lyricsLrc,
     DateTime? createdAt,
     DateTime? syncedAt,
   }) {
@@ -99,6 +104,7 @@ class FavoriteSong {
       r2CoverUrl: r2CoverUrl ?? this.r2CoverUrl,
       duration: duration ?? this.duration,
       platform: platform ?? this.platform,
+      lyricsLrc: lyricsLrc ?? this.lyricsLrc,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
     );

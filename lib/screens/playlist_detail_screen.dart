@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/playlist.dart';
@@ -9,6 +10,7 @@ import '../theme/app_styles.dart';
 import '../providers/theme_provider.dart';
 import '../services/music_api_service.dart';
 import '../widgets/mini_player.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
 
 class PlaylistDetailScreen extends StatefulWidget {
   final Playlist playlist;
@@ -129,10 +131,19 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             pinned: true,
             backgroundColor: colors.background,
             automaticallyImplyLeading: false,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
+            flexibleSpace: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onPanStart: !kIsWeb ? (_) {
+                try {
+                  appWindow.startDragging();
+                } catch (e) {
+                  // 桌面平台支持窗口拖动
+                }
+              } : null,
+              child: FlexibleSpaceBar(
+                background: Stack(
+                  fit: StackFit.expand,
+                  children: [
                   // 背景模糊封面
                   CachedNetworkImage(
                     imageUrl: widget.playlist.coverUrl,
@@ -251,40 +262,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 20),
-                                    // 播放全部按钮
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        if (_allSongs.isNotEmpty) {
-                                          Provider.of<MusicProvider>(context, listen: false)
-                                              .playSong(
-                                            _allSongs.first,
-                                            playlist: _allSongs,
-                                          );
-                                        }
-                                      },
-                                      icon: const Icon(Icons.play_arrow_rounded, size: 24),
-                                      label: const Text(
-                                        '播放全部',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: colors.accent,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 32,
-                                          vertical: 14,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-                                        ),
-                                        elevation: 4,
-                                        shadowColor: colors.accent.withOpacity(0.4),
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -296,6 +273,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   ),
                 ],
               ),
+            ),
             ),
           ),
           // 歌曲列表标题

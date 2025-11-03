@@ -6,8 +6,11 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/music_provider.dart';
 import '../services/music_api_service.dart';
+import '../services/lyrics_service.dart';
 import '../models/play_mode.dart';
 import '../widgets/audio_quality_selector.dart';
+import '../extensions/extensions.dart';
+import '../utils/error_handler.dart';
 import 'dart:ui';
 import 'package:flutter_lyric/lyrics_reader.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
@@ -66,13 +69,38 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     _currentSongId = song.id;
 
     try {
-      final lyrics = await _apiService.getLyrics(songId: song.id);
+      String? lyrics;
+      // 1) 优先使用 Song 对象中的歌词（如从“我喜欢”映射而来）
+      if (song.lyricsLrc != null && song.lyricsLrc!.isNotEmpty) {
+        lyrics = song.lyricsLrc;
+        print('✅ 使用对象存储的歌词: ${song.title}');
+      }
+      // 2) 其次从数据库读取歌词
+      lyrics ??= await LyricsService().getLyrics(song.id);
+      if (lyrics != null && lyrics.isNotEmpty) {
+        print('✅ 从数据库读取歌词: ${song.title}');
+      }
+      // 3) 最后回退到 API，并把结果写回数据库
+      if (lyrics == null || lyrics.isEmpty) {
+        print('⚠️ 无本地歌词，使用API获取: ${song.title}');
+        lyrics = await _apiService.getLyrics(songId: song.id);
+        if (lyrics != null && lyrics.isNotEmpty) {
+          // 异步写回数据库，失败忽略
+          LyricsService().saveLyrics(
+            songId: song.id,
+            lyrics: lyrics!,
+            title: song.title,
+            artist: song.artist,
+          );
+        }
+      }
+      
       if (mounted && lyrics != null && lyrics.isNotEmpty) {
         setState(() {
           // 使用 flutter_lyric 解析歌词
           try {
             lyricModel = LyricsModelBuilder.create()
-                .bindLyricToMain(lyrics)
+                .bindLyricToMain(lyrics!)
                 .getModel();
           } catch (e) {
             // 歌词解析失败，使用默认歌词
@@ -152,9 +180,9 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             return Stack(
               fit: StackFit.expand,
               children: [
-                // 背景封面（铺满并模糊）
+                // 背景封面（铺满并模糊）- 优先使用R2封面
                 CachedNetworkImage(
-                  imageUrl: song.coverUrl,
+                  imageUrl: song.r2CoverUrl ?? song.coverUrl,
                   fit: BoxFit.cover,
                   placeholder: (context, url) => Container(
                     decoration: BoxDecoration(
@@ -339,9 +367,15 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                     '定时关闭',
                     style: TextStyle(color: Colors.white),
                   ),
+                  trailing: musicProvider.sleepTimer.isActive
+                      ? Text(
+                          musicProvider.sleepTimer.formatRemainingTime(),
+                          style: TextStyle(color: Colors.orange.withOpacity(0.8)),
+                        )
+                      : null,
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: 实现定时关闭功能
+                    _showSleepTimerDialog(context, musicProvider);
                   },
                 ),
                 // 播放列表
@@ -357,7 +391,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: 显示播放列表
+                    _showPlaylistDialog(context, musicProvider);
                   },
                 ),
                 const SizedBox(height: 20),
@@ -365,6 +399,239 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             ),
           );
         },
+      ),
+    );
+  }
+
+  // 显示定时关闭对话框
+  void _showSleepTimerDialog(BuildContext context, MusicProvider musicProvider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 拖动指示器
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                '定时关闭',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            // 定时选项
+            _buildTimerOption(context, musicProvider, '15分钟', const Duration(minutes: 15)),
+            _buildTimerOption(context, musicProvider, '30分钟', const Duration(minutes: 30)),
+            _buildTimerOption(context, musicProvider, '45分钟', const Duration(minutes: 45)),
+            _buildTimerOption(context, musicProvider, '60分钟', const Duration(minutes: 60)),
+            _buildTimerOption(context, musicProvider, '90分钟', const Duration(minutes: 90)),
+            // 取消定时
+            if (musicProvider.sleepTimer.isActive)
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined, color: Colors.red),
+                title: const Text(
+                  '取消定时',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  musicProvider.sleepTimer.cancel();
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('已取消定时关闭'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimerOption(
+    BuildContext context,
+    MusicProvider musicProvider,
+    String label,
+    Duration duration,
+  ) {
+    return ListTile(
+      leading: const Icon(Icons.timer_outlined, color: Colors.white),
+      title: Text(
+        label,
+        style: const TextStyle(color: Colors.white),
+      ),
+      onTap: () {
+        musicProvider.sleepTimer.setTimer(duration, () {
+          // 时间到，暂停播放
+          musicProvider.pause();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('定时关闭已触发，已暂停播放'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        });
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已设置定时关闭：$label'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+    );
+  }
+
+  // 显示播放列表对话框
+  void _showPlaylistDialog(BuildContext context, MusicProvider musicProvider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // 拖动指示器
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // 标题
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '播放列表 (${musicProvider.playlist.length})',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        musicProvider.clearPlaylist();
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('已清空播放列表'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: Text(
+                        '清空',
+                        style: TextStyle(color: Colors.red.withOpacity(0.8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // 播放列表
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: musicProvider.playlist.length,
+                  itemBuilder: (context, index) {
+                    final song = musicProvider.playlist[index];
+                    final isPlaying = musicProvider.currentSong?.id == song.id;
+                    
+                    return ListTile(
+                      leading: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          image: DecorationImage(
+                            image: CachedNetworkImageProvider(song.r2CoverUrl ?? song.coverUrl),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        child: isPlaying
+                            ? Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.6),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.equalizer_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              )
+                            : null,
+                      ),
+                      title: Text(
+                        song.title,
+                        style: TextStyle(
+                          color: isPlaying ? Colors.orange : Colors.white,
+                          fontWeight: isPlaying ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        song.artist,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () {
+                          musicProvider.removeFromPlaylist(index);
+                        },
+                      ),
+                      onTap: () {
+                        musicProvider.playSong(song, playlist: musicProvider.playlist);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -600,16 +867,33 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             ),
             // 收藏按钮
             if (song != null)
-              _buildSimpleButton(
-                icon: musicProvider.isFavorite(song.id)
-                    ? Icons.favorite
-                    : Icons.favorite_border,
-                size: 28,
-                color: musicProvider.isFavorite(song.id)
-                    ? Colors.red
-                    : null,
-                onPressed: () => musicProvider.toggleFavorite(song.id),
-              )
+              musicProvider.isFavoriteOperationInProgress(song.id)
+                  ? SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                          ),
+                        ),
+                      ),
+                    )
+                  : _buildSimpleButton(
+                      icon: musicProvider.isFavorite(song.id)
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      size: 28,
+                      color: musicProvider.isFavorite(song.id)
+                          ? Colors.red
+                          : null,
+                      onPressed: () async {
+                        await musicProvider.toggleFavorite(song.id);
+                      },
+                    )
             else
               const SizedBox(width: 44), // 占位
           ],
@@ -623,61 +907,111 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     final song = musicProvider.currentSong;
     
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // 播放模式
-        _buildSimpleButton(
-          icon: _getPlayModeIcon(musicProvider.playMode),
-          size: 24,
-          opacity: musicProvider.playMode == PlayMode.sequence ? 0.5 : 1.0,
-          onPressed: () => musicProvider.togglePlayMode(),
-        ),
-        const SizedBox(width: 20),
-        // 上一首
-        _buildSimpleButton(
-          icon: Icons.skip_previous_rounded,
-          size: 36,
-          onPressed: () => musicProvider.playPrevious(),
-        ),
-        const SizedBox(width: 16),
-        // 播放/暂停
-        _buildPlayButton(musicProvider),
-        const SizedBox(width: 16),
-        // 下一首
-        _buildSimpleButton(
-          icon: Icons.skip_next_rounded,
-          size: 36,
-          onPressed: () => musicProvider.playNext(),
-        ),
-        const SizedBox(width: 20),
-        // 收藏按钮
-        if (song != null)
-          _buildSimpleButton(
-            icon: musicProvider.isFavorite(song.id)
-                ? Icons.favorite
-                : Icons.favorite_border,
-            size: 24,
-            color: musicProvider.isFavorite(song.id)
-                ? Colors.red
-                : null,
-            onPressed: () => musicProvider.toggleFavorite(song.id),
+        // 左侧按钮组
+        Expanded(
+          child: Row(
+            children: [
+              // 播放模式
+              _buildSimpleButton(
+                icon: _getPlayModeIcon(musicProvider.playMode),
+                size: 24,
+                opacity: musicProvider.playMode == PlayMode.sequence ? 0.5 : 1.0,
+                onPressed: () => musicProvider.togglePlayMode(),
+              ),
+            ],
           ),
-        const SizedBox(width: 20),
-        // 音量控制
-        _buildVolumeControl(musicProvider),
-        const SizedBox(width: 20),
-        // 音质选择
-        _buildSimpleButton(
-          icon: Icons.high_quality_rounded,
-          size: 24,
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              backgroundColor: Colors.transparent,
-              isScrollControlled: true,
-              builder: (context) => const AudioQualitySelector(),
-            );
-          },
+        ),
+        // 中间播放控制组（绝对居中）
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 上一首
+            _buildSimpleButton(
+              icon: Icons.skip_previous_rounded,
+              size: 36,
+              onPressed: () => musicProvider.playPrevious(),
+            ),
+            const SizedBox(width: 16),
+            // 播放/暂停
+            _buildPlayButton(musicProvider),
+            const SizedBox(width: 16),
+            // 下一首
+            _buildSimpleButton(
+              icon: Icons.skip_next_rounded,
+              size: 36,
+              onPressed: () => musicProvider.playNext(),
+            ),
+          ],
+        ),
+        // 右侧按钮组
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // 收藏按钮
+              if (song != null)
+                musicProvider.isFavoriteOperationInProgress(song.id)
+                    ? SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                            ),
+                          ),
+                        ),
+                      )
+                    : _buildSimpleButton(
+                        icon: musicProvider.isFavorite(song.id)
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        size: 24,
+                        color: musicProvider.isFavorite(song.id)
+                            ? Colors.red
+                            : null,
+                        onPressed: () async {
+                          await musicProvider.toggleFavorite(song.id);
+                        },
+                      ),
+              const SizedBox(width: 16),
+              // 音量控制
+              _buildVolumeControl(musicProvider),
+              const SizedBox(width: 16),
+              // 音质选择
+              _buildSimpleButton(
+                icon: Icons.high_quality_rounded,
+                size: 24,
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    isScrollControlled: true,
+                    builder: (context) => const AudioQualitySelector(),
+                  );
+                },
+              ),
+              const SizedBox(width: 16),
+              // 定时关闭
+              _buildSimpleButton(
+                icon: Icons.timer_outlined,
+                size: 24,
+                color: musicProvider.sleepTimer.isActive ? Colors.orange : null,
+                onPressed: () => _showSleepTimerDialog(context, musicProvider),
+              ),
+              const SizedBox(width: 16),
+              // 播放列表
+              _buildSimpleButton(
+                icon: Icons.queue_music_rounded,
+                size: 24,
+                onPressed: () => _showPlaylistDialog(context, musicProvider),
+              ),
+            ],
+          ),
         ),
       ],
     );

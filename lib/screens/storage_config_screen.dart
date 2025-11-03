@@ -23,6 +23,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
   late TextEditingController _r2SecretKeyController;
   late TextEditingController _r2BucketController;
   late TextEditingController _r2RegionController;
+  late TextEditingController _r2CustomDomainController;
   
   bool _enableSync = false;
   bool _isLoading = false;
@@ -45,6 +46,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
     _r2SecretKeyController = TextEditingController();
     _r2BucketController = TextEditingController();
     _r2RegionController = TextEditingController(text: 'auto');
+    _r2CustomDomainController = TextEditingController();
   }
 
   void _loadConfig() {
@@ -59,6 +61,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
       _r2SecretKeyController.text = config.r2SecretKey;
       _r2BucketController.text = config.r2BucketName;
       _r2RegionController.text = config.r2Region;
+      _r2CustomDomainController.text = config.r2CustomDomain ?? '';
       _enableSync = config.enableSync;
     });
   }
@@ -72,6 +75,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
     _r2SecretKeyController.dispose();
     _r2BucketController.dispose();
     _r2RegionController.dispose();
+    _r2CustomDomainController.dispose();
     super.dispose();
   }
 
@@ -88,6 +92,9 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
       r2SecretKey: _r2SecretKeyController.text.trim(),
       r2BucketName: _r2BucketController.text.trim(),
       r2Region: _r2RegionController.text.trim(),
+      r2CustomDomain: _r2CustomDomainController.text.trim().isEmpty 
+          ? null 
+          : _r2CustomDomainController.text.trim(),
       enableSync: _enableSync,
     );
 
@@ -316,6 +323,14 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
               hint: 'auto',
               colors: colors,
             ),
+            SizedBox(height: AppStyles.spacingM),
+            _buildTextField(
+              controller: _r2CustomDomainController,
+              label: 'R2 自定义域名（可选）',
+              hint: 'music.ysnight.cn',
+              colors: colors,
+              helperText: '在 Cloudflare R2 控制台绑定自定义域名后填写\n使用自定义域名可获得永久有效的 URL',
+            ),
             SizedBox(height: AppStyles.spacingXL),
 
             // 说明文档
@@ -345,6 +360,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
     bool obscureText = false,
     Widget? suffixIcon,
     String? Function(String?)? validator,
+    String? helperText,
   }) {
     return Container(
       decoration: AppStyles.glassDecoration(
@@ -360,6 +376,12 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
+          helperText: helperText,
+          helperMaxLines: 2,
+          helperStyle: TextStyle(
+            color: colors.textSecondary.withOpacity(0.7),
+            fontSize: 12,
+          ),
           labelStyle: TextStyle(color: colors.textSecondary),
           hintStyle: TextStyle(color: colors.textSecondary.withOpacity(0.5)),
           border: OutlineInputBorder(

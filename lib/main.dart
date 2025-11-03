@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +47,14 @@ class MyApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             theme: themeProvider.themeData,
             home: const HomeScreen(),
+            scrollBehavior: const MaterialScrollBehavior().copyWith(
+              dragDevices: {
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.touch,
+                PointerDeviceKind.stylus,
+                PointerDeviceKind.trackpad,
+              },
+            ),
           );
         },
       ),

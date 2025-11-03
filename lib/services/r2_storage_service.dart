@@ -9,6 +9,7 @@ class R2StorageService {
   static final R2StorageService _instance = R2StorageService._internal();
   Minio? _client;
   String? _bucketName;
+  String? _customDomain; // 自定义域名
   bool _initialized = false;
 
   factory R2StorageService() => _instance;
@@ -40,7 +41,15 @@ class R2StorageService {
       );
 
       _bucketName = config.r2BucketName;
+      _customDomain = config.r2CustomDomain; // 保存自定义域名
       _initialized = true;
+      
+      // 打印配置信息
+      if (_customDomain != null && _customDomain!.isNotEmpty) {
+        print('✅ R2 自定义域名: $_customDomain');
+      } else {
+        print('⚠️ 未配置自定义域名，将使用预签名 URL');
+      }
 
       // 检查 bucket 是否存在
       await _ensureBucketExists();
@@ -72,6 +81,7 @@ class R2StorageService {
   bool get isInitialized => _initialized && _client != null && _bucketName != null;
 
   /// 上传文件
+  /// 如果配置了自定义域名，直接使用公开 URL；否则使用预签名 URL
   Future<String?> uploadFile(File file, String objectName) async {
     if (!isInitialized) {
       print('R2 未初始化');
@@ -82,6 +92,8 @@ class R2StorageService {
       final fileStream = file.openRead().map((chunk) => Uint8List.fromList(chunk));
       final fileSize = await file.length();
 
+      print('📤 上传文件到 R2: $objectName (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)');
+
       await _client!.putObject(
         _bucketName!,
         objectName,
@@ -89,10 +101,27 @@ class R2StorageService {
         size: fileSize,
       );
 
-      // 返回文件的公共 URL
+      print('✅ 文件上传成功');
+
+      // 如果配置了自定义域名，直接返回公开 URL（永久有效）
+      if (_customDomain != null && _customDomain!.isNotEmpty) {
+        final publicUrl = getPublicUrl(objectName);
+        print('✅ 使用自定义域名 URL（永久有效）');
+        return publicUrl;
+      }
+
+      // 否则使用预签名 URL（7天有效）
+      print('⚠️ 未配置自定义域名，使用预签名 URL（7天有效）');
+      final presignedUrl = await getPresignedUrl(objectName);
+      if (presignedUrl != null) {
+        return presignedUrl;
+      }
+
+      // 最后回退到公开 URL
+      print('⚠️ 预签名URL生成失败，回退到公开URL');
       return getPublicUrl(objectName);
     } catch (e) {
-      print('上传文件失败: $e');
+      print('❌ 上传文件失败: $e');
       return null;
     }
   }
@@ -197,12 +226,47 @@ class R2StorageService {
   }
 
   /// 获取文件的公共 URL
+  /// 优先级：自定义域名 > R2.dev > S3 格式
   String getPublicUrl(String objectName) {
     if (_client == null || _bucketName == null) return '';
     
-    // R2 的公共 URL 格式
+    // 优先使用自定义域名（推荐）
+    if (_customDomain != null && _customDomain!.isNotEmpty) {
+      print('🌐 使用自定义域名: https://$_customDomain/$objectName');
+      return 'https://$_customDomain/$objectName';
+    }
+    
     final endpoint = _client!.endPoint;
+    
+    // 尝试使用 R2.dev 格式
+    if (endpoint.contains('r2.cloudflarestorage.com')) {
+      final accountId = endpoint.split('.')[0];
+      return 'https://$_bucketName.$accountId.r2.dev/$objectName';
+    }
+    
+    // 回退到标准 S3 格式（需要公开访问权限）
     return 'https://$endpoint/$_bucketName/$objectName';
+  }
+  
+  /// 生成预签名 URL（临时访问链接）
+  /// [objectName] 对象名称
+  /// [expirySeconds] 过期时间（秒），默认7天
+  Future<String?> getPresignedUrl(String objectName, {int expirySeconds = 604800}) async {
+    if (!isInitialized) return null;
+    
+    try {
+      // 使用 Minio 客户端生成预签名 URL
+      final url = await _client!.presignedGetObject(
+        _bucketName!,
+        objectName,
+        expires: expirySeconds,
+      );
+      print('✅ 生成预签名URL: $url');
+      return url;
+    } catch (e) {
+      print('❌ 生成预签名URL失败: $e');
+      return null;
+    }
   }
 
   /// 检查文件是否存在

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/favorite_song.dart';
@@ -6,6 +7,9 @@ import '../models/song.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
+import '../extensions/favorite_song_extension.dart';
+import '../widgets/mini_player.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
 
 /// 我喜欢的歌曲列表页面
 class FavoritesScreen extends StatefulWidget {
@@ -52,126 +56,75 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: Column(
+      body: Stack(
         children: [
-          // 自定义顶部导航栏
-          Container(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 16,
-              right: 16,
-              bottom: 16,
-            ),
-            decoration: BoxDecoration(
-              color: colors.surface.withOpacity(0.95),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // 返回按钮
-                IconButton(
+          CustomScrollView(
+            physics: AlwaysScrollableScrollPhysics(), // 强制启用滚动
+            slivers: [
+              // 顶部导航栏
+              SliverAppBar(
+                pinned: true,
+                backgroundColor: colors.surface.withOpacity(0.95),
+                elevation: 0,
+                leading: IconButton(
                   icon: Icon(Icons.arrow_back_ios_new, color: colors.textPrimary, size: 20),
                   onPressed: () => Navigator.pop(context),
-                  padding: EdgeInsets.all(8),
                 ),
-                SizedBox(width: 8),
-                // 标题
-                Icon(Icons.favorite, color: Colors.red, size: 26),
-                SizedBox(width: 12),
-                Text(
-                  '我喜欢',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Spacer(),
-                // 播放全部按钮
-                if (_favorites.isNotEmpty)
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [colors.accent, colors.accent.withOpacity(0.8)],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colors.accent.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () {
-                          final songs = _favorites.map((f) => Song(
-                            id: f.id,
-                            title: f.title,
-                            artist: f.artist,
-                            album: f.album,
-                            coverUrl: f.coverUrl,
-                            audioUrl: f.r2AudioUrl ?? '',
-                            duration: Duration(seconds: f.duration),
-                            platform: f.platform,
-                          )).toList();
-                          
-                          if (songs.isNotEmpty) {
-                            musicProvider.playSong(songs.first, playlist: songs);
-                          }
-                        },
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
-                              SizedBox(width: 4),
-                              Text(
-                                '播放全部',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                title: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: !kIsWeb ? (_) {
+                    try {
+                      appWindow.startDragging();
+                    } catch (e) {
+                      // 桌面平台支持窗口拖动
+                    }
+                  } : null,
+                  child: Row(
+                    children: [
+                      Icon(Icons.favorite, color: Colors.red, size: 26),
+                      SizedBox(width: 12),
+                      Text(
+                        '我喜欢',
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                SizedBox(width: 12),
-                // 刷新按钮
-                IconButton(
-                  icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
-                  onPressed: _loadFavorites,
-                  tooltip: '刷新',
-                  padding: EdgeInsets.all(8),
                 ),
-              ],
+                actions: [
+                  IconButton(
+                    icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
+                    onPressed: _loadFavorites,
+                    tooltip: '刷新',
+                  ),
+                ],
+              ),
+              // 内容区域
+              _isLoading
+                  ? SliverFillRemaining(
+                      child: Center(
+                        child: CircularProgressIndicator(color: colors.accent),
+                      ),
+                    )
+                  : _favorites.isEmpty
+                      ? SliverFillRemaining(
+                          child: _buildEmptyState(colors),
+                        )
+                      : _buildFavoritesListSliver(colors, musicProvider),
+            ],
+          ),
+          // Mini 播放器
+          if (musicProvider.currentSong != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: MiniPlayer(),
             ),
-          ),
-          // 内容区域
-          Expanded(
-            child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(color: colors.accent),
-                  )
-                : _favorites.isEmpty
-                    ? _buildEmptyState(colors)
-                    : _buildFavoritesList(colors, musicProvider),
-          ),
         ],
       ),
     );
@@ -209,19 +162,26 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     );
   }
 
-  Widget _buildFavoritesList(ThemeColors colors, MusicProvider musicProvider) {
-    return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      itemCount: _favorites.length,
-      itemBuilder: (context, index) {
-        final favorite = _favorites[index];
-        final isPlaying = musicProvider.currentSong?.id == favorite.id;
-        
-        return Padding(
-          padding: EdgeInsets.only(bottom: 12),
-          child: _buildSongItem(favorite, isPlaying, colors, musicProvider),
-        );
-      },
+  Widget _buildFavoritesListSliver(ThemeColors colors, MusicProvider musicProvider) {
+    // 如果有正在播放的歌曲，底部留出空间给 mini 播放器
+    final bottomPadding = musicProvider.currentSong != null ? 80.0 : 16.0;
+
+    return SliverPadding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: bottomPadding),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final favorite = _favorites[index];
+            final isPlaying = musicProvider.currentSong?.id == favorite.id;
+            
+            return Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: _buildSongItem(favorite, isPlaying, colors, musicProvider),
+            );
+          },
+          childCount: _favorites.length,
+        ),
+      ),
     );
   }
 
@@ -256,27 +216,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            final song = Song(
-              id: favorite.id,
-              title: favorite.title,
-              artist: favorite.artist,
-              album: favorite.album,
-              coverUrl: favorite.coverUrl,
-              audioUrl: favorite.r2AudioUrl ?? '',
-              duration: Duration(seconds: favorite.duration),
-              platform: favorite.platform,
-            );
-            
-            final allSongs = _favorites.map((f) => Song(
-              id: f.id,
-              title: f.title,
-              artist: f.artist,
-              album: f.album,
-              coverUrl: f.coverUrl,
-              audioUrl: f.r2AudioUrl ?? '',
-              duration: Duration(seconds: f.duration),
-              platform: f.platform,
-            )).toList();
+            // 使用扩展方法转换
+            final song = favorite.toSong();
+            final allSongs = _favorites.toSongList();
             
             musicProvider.playSong(song, playlist: allSongs);
           },
@@ -373,31 +315,49 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     color: Colors.red.withOpacity(0.1),
                   ),
                   child: IconButton(
-                    icon: Icon(Icons.favorite_rounded, color: Colors.red, size: 20),
-                    onPressed: () {
-                      final songTitle = favorite.title;
+                    icon: musicProvider.isFavoriteOperationInProgress(favorite.id)
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                            ),
+                          )
+                        : Icon(Icons.favorite_rounded, color: Colors.red, size: 20),
+                    onPressed: musicProvider.isFavoriteOperationInProgress(favorite.id)
+                        ? null // 禁用按钮
+                        : () async {
                       final songId = favorite.id;
+                      final songTitle = favorite.title;
                       
-                      setState(() {
-                        _favorites.removeWhere((f) => f.id == songId);
-                      });
+                      // 调用 toggleFavorite 并等待结果
+                      final success = await musicProvider.toggleFavorite(songId);
                       
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('已取消收藏：$songTitle'),
-                          duration: const Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      );
-                      
-                      musicProvider.toggleFavorite(songId);
-                      musicProvider.favoriteManager.removeFavorite(songId).then((_) {
-                        print('✅ 收藏删除完成: $songTitle');
-                      }).catchError((e) {
-                        print('❌ 删除收藏失败: $e');
-                        _loadFavorites();
-                      });
+                      if (mounted) {
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('已取消收藏：$songTitle'),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: Colors.orange.shade700,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          );
+                          _loadFavorites(); // 刷新列表
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('取消收藏失败，请重试'),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: Colors.red.shade700,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          );
+                        }
+                      }
                     },
                     padding: EdgeInsets.all(8),
                     constraints: BoxConstraints(),

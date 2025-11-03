@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/storage_config.dart';
 import '../models/favorite_song.dart';
+import '../models/storage_config.dart';
+import '../utils/error_handler.dart';
 
 /// Supabase 数据库服务
 class SupabaseService {
@@ -31,8 +32,8 @@ class SupabaseService {
       await _ensureTableExists();
       
       return true;
-    } catch (e) {
-      print('初始化 Supabase 失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('初始化 Supabase', e, stackTrace);
       _initialized = false;
       return false;
     }
@@ -86,8 +87,8 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
     try {
       await _client!.from('favorite_songs').upsert(song.toJson());
       return true;
-    } catch (e) {
-      print('添加收藏失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('添加收藏到 Supabase', e, stackTrace);
       return false;
     }
   }
@@ -102,8 +103,8 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
     try {
       await _client!.from('favorite_songs').delete().eq('id', songId);
       return true;
-    } catch (e) {
-      print('删除收藏失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('删除收藏', e, stackTrace);
       return false;
     }
   }
@@ -128,8 +129,8 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
       
       print('✅ 从 Supabase 获取到 ${favorites.length} 首歌曲');
       return favorites;
-    } catch (e) {
-      print('❌ 获取收藏列表失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('获取收藏列表', e, stackTrace);
       return [];
     }
   }
@@ -148,8 +149,8 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
           .maybeSingle();
 
       return response != null;
-    } catch (e) {
-      print('检查收藏状态失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('检查收藏状态', e, stackTrace);
       return false;
     }
   }
@@ -167,8 +168,8 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
           .update(song.toJson())
           .eq('id', song.id);
       return true;
-    } catch (e) {
-      print('更新收藏失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('更新收藏', e, stackTrace);
       return false;
     }
   }
@@ -184,8 +185,8 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
       final jsonList = songs.map((s) => s.toJson()).toList();
       await _client!.from('favorite_songs').upsert(jsonList);
       return true;
-    } catch (e) {
-      print('批量同步收藏失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('批量同步收藏', e, stackTrace);
       return false;
     }
   }
@@ -200,8 +201,8 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
     try {
       await _client!.from('favorite_songs').delete().neq('id', '');
       return true;
-    } catch (e) {
-      print('清除收藏失败: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.logError('清除所有收藏', e, stackTrace);
       return false;
     }
   }

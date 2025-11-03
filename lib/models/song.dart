@@ -7,6 +7,8 @@ class Song {
   final String audioUrl;
   final Duration duration;
   final String? platform; // 音乐平台：netease, qq, kugou等
+  final String? r2CoverUrl; // R2对象存储的封面URL
+  final String? lyricsLrc; // LRC 格式歌词
 
   Song({
     required this.id,
@@ -17,6 +19,8 @@ class Song {
     required this.audioUrl,
     required this.duration,
     this.platform,
+    this.r2CoverUrl,
+    this.lyricsLrc,
   });
 
   factory Song.fromJson(Map<String, dynamic> json) {
@@ -29,6 +33,8 @@ class Song {
       audioUrl: json['audioUrl'] ?? '',
       duration: Duration(seconds: json['duration'] ?? 0),
       platform: json['platform'],
+      r2CoverUrl: json['r2CoverUrl'],
+      lyricsLrc: json['lyricsLrc'],
     );
   }
 
@@ -50,7 +56,7 @@ class Song {
       artist: json['artist']?.toString().split(',').first ?? '',
       album: json['album'] ?? '',
       coverUrl: json['pic'] ?? json['cover'] ?? '',
-      audioUrl: json['url'] ?? '',
+      audioUrl: json['url'],
       duration: Duration(seconds: durationSeconds),
       platform: platform,
     );
@@ -64,8 +70,10 @@ class Song {
       'album': album,
       'coverUrl': coverUrl,
       'audioUrl': audioUrl,
-      'duration': duration.inSeconds,
+      'duration': duration?.inSeconds,
       'platform': platform,
+      'r2CoverUrl': r2CoverUrl,
+      'lyricsLrc': lyricsLrc,
     };
   }
 

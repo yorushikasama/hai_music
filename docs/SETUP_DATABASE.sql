@@ -11,7 +11,6 @@
 DROP TABLE IF EXISTS sync_logs CASCADE;
 DROP TABLE IF EXISTS playlist_songs CASCADE;
 DROP TABLE IF EXISTS playlists CASCADE;
-DROP TABLE IF EXISTS song_lyrics CASCADE;
 DROP TABLE IF EXISTS favorite_songs CASCADE;
 
 -- ============================================
@@ -61,36 +60,16 @@ CREATE TABLE favorite_songs (
   -- 额外信息
   play_count INTEGER DEFAULT 0,
   tags TEXT[],
-  notes TEXT
+  notes TEXT,
+  
+  -- 歌词信息
+  lyrics_lrc TEXT,                -- LRC 格式歌词（带时间轴）
+  lyrics_translation TEXT,        -- 歌词翻译
+  lyrics_source TEXT              -- 歌词来源（netease/qq/kugou等）
 );
 
 -- ============================================
--- 2. 歌词表
--- ============================================
-CREATE TABLE song_lyrics (
-  id SERIAL PRIMARY KEY,
-  song_id TEXT NOT NULL REFERENCES favorite_songs(id) ON DELETE CASCADE,
-  
-  -- 歌词内容
-  lyrics_text TEXT,
-  lyrics_lrc TEXT,
-  lyrics_translation TEXT,
-  
-  -- 来源信息
-  lyrics_source TEXT,
-  
-  -- R2存储
-  r2_lyrics_url TEXT,
-  
-  -- 时间戳
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
-  UNIQUE(song_id)
-);
-
--- ============================================
--- 3. 同步日志表
+-- 2. 同步日志表
 -- ============================================
 CREATE TABLE sync_logs (
   id SERIAL PRIMARY KEY,
@@ -111,7 +90,7 @@ CREATE TABLE sync_logs (
 );
 
 -- ============================================
--- 4. 播放列表表
+-- 3. 播放列表表
 -- ============================================
 CREATE TABLE playlists (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -128,7 +107,7 @@ CREATE TABLE playlists (
 );
 
 -- ============================================
--- 5. 播放列表歌曲关联表
+-- 4. 播放列表歌曲关联表
 -- ============================================
 CREATE TABLE playlist_songs (
   id SERIAL PRIMARY KEY,
@@ -153,9 +132,6 @@ CREATE INDEX idx_favorite_songs_platform ON favorite_songs(platform);
 CREATE INDEX idx_favorite_songs_sync_status ON favorite_songs(sync_status);
 CREATE INDEX idx_favorite_songs_last_played ON favorite_songs(last_played_at DESC);
 
--- song_lyrics 索引
-CREATE INDEX idx_song_lyrics_song_id ON song_lyrics(song_id);
-
 -- sync_logs 索引
 CREATE INDEX idx_sync_logs_song_id ON sync_logs(song_id);
 CREATE INDEX idx_sync_logs_created_at ON sync_logs(created_at DESC);
@@ -174,7 +150,6 @@ CREATE INDEX idx_playlist_songs_song_id ON playlist_songs(song_id);
 -- 如果需要多用户支持，请取消下面的注释并配置认证
 
 -- ALTER TABLE favorite_songs ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE song_lyrics ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE sync_logs ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE playlists ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE playlist_songs ENABLE ROW LEVEL SECURITY;
@@ -219,10 +194,6 @@ END;
 $$ language 'plpgsql';
 
 -- 应用触发器
-CREATE TRIGGER update_song_lyrics_updated_at 
-  BEFORE UPDATE ON song_lyrics
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_playlists_updated_at 
   BEFORE UPDATE ON playlists
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -231,15 +202,8 @@ CREATE TRIGGER update_playlists_updated_at
 -- 创建视图
 -- ============================================
 
--- 完整歌曲信息视图（包含歌词）
-CREATE VIEW v_songs_with_lyrics AS
-SELECT 
-  fs.*,
-  sl.lyrics_text,
-  sl.lyrics_lrc,
-  sl.lyrics_translation
-FROM favorite_songs fs
-LEFT JOIN song_lyrics sl ON fs.id = sl.song_id;
+-- 完整歌曲信息视图（已包含歌词字段，无需JOIN）
+-- 注意：favorite_songs 表已包含 lyrics, lyrics_lrc, lyrics_translation 字段
 
 -- 播放列表详情视图
 CREATE VIEW v_playlist_details AS

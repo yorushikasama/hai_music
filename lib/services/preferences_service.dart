@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_constants.dart';
 
 /// SharedPreferences 服务类
 /// 用于保存和读取用户设置、播放历史等
@@ -76,9 +77,9 @@ class PreferencesService {
     history.remove(keyword);
     // 添加到最前面
     history.insert(0, keyword);
-    // 最多保存20条
-    if (history.length > 20) {
-      history = history.sublist(0, 20);
+    // 最多保存指定条数
+    if (history.length > AppConstants.maxSearchHistory) {
+      history = history.sublist(0, AppConstants.maxSearchHistory);
     }
     return await _prefs.setStringList('search_history', history);
   }
@@ -100,8 +101,8 @@ class PreferencesService {
     List<String> history = getPlayHistory();
     history.remove(songId);
     history.insert(0, songId);
-    if (history.length > 50) {
-      history = history.sublist(0, 50);
+    if (history.length > AppConstants.maxPlayHistory) {
+      history = history.sublist(0, AppConstants.maxPlayHistory);
     }
     return await _prefs.setStringList('play_history', history);
   }

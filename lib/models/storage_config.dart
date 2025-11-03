@@ -10,6 +10,7 @@ class StorageConfig {
   final String r2SecretKey;
   final String r2BucketName;
   final String r2Region;
+  final String? r2CustomDomain; // R2 自定义域名（如：music.ysnight.cn）
   
   // 是否启用云端同步
   final bool enableSync;
@@ -22,6 +23,7 @@ class StorageConfig {
     required this.r2SecretKey,
     required this.r2BucketName,
     this.r2Region = 'auto',
+    this.r2CustomDomain,
     this.enableSync = false,
   });
 
@@ -34,6 +36,7 @@ class StorageConfig {
       r2SecretKey: json['r2SecretKey'] ?? '',
       r2BucketName: json['r2BucketName'] ?? '',
       r2Region: json['r2Region'] ?? 'auto',
+      r2CustomDomain: json['r2CustomDomain'],
       enableSync: json['enableSync'] ?? false,
     );
   }
@@ -47,6 +50,7 @@ class StorageConfig {
       'r2SecretKey': r2SecretKey,
       'r2BucketName': r2BucketName,
       'r2Region': r2Region,
+      'r2CustomDomain': r2CustomDomain,
       'enableSync': enableSync,
     };
   }
@@ -70,6 +74,7 @@ class StorageConfig {
       r2AccessKey: '',
       r2SecretKey: '',
       r2BucketName: '',
+      r2CustomDomain: null,
       enableSync: false,
     );
   }
@@ -82,6 +87,7 @@ class StorageConfig {
     String? r2SecretKey,
     String? r2BucketName,
     String? r2Region,
+    String? r2CustomDomain,
     bool? enableSync,
   }) {
     return StorageConfig(
@@ -92,6 +98,7 @@ class StorageConfig {
       r2SecretKey: r2SecretKey ?? this.r2SecretKey,
       r2BucketName: r2BucketName ?? this.r2BucketName,
       r2Region: r2Region ?? this.r2Region,
+      r2CustomDomain: r2CustomDomain ?? this.r2CustomDomain,
       enableSync: enableSync ?? this.enableSync,
     );
   }

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/song.dart';
+import '../config/app_constants.dart';
 import 'dio_client.dart';
 
 /// 音乐API服务类
@@ -25,11 +26,11 @@ class MusicApiService {
     try {
       // 使用点歌API搜索（返回列表）
       final response = await _dioClient.get(
-        'https://api.vkeys.cn/v2/music/tencent',
+        AppConstants.searchApiUrl,
         queryParameters: {
           'word': keyword,
-          'num': limit.clamp(1, 60), // 每页数量，区间[1,60]
-          'page': page, // 页码
+          'num': limit.clamp(1, AppConstants.maxSearchResults),
+          'page': page,
         },
       );
       
