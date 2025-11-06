@@ -1,19 +1,16 @@
-import 'dart:io' show Platform;
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_lyric/lyrics_reader.dart';
 import '../providers/music_provider.dart';
 import '../services/music_api_service.dart';
 import '../services/lyrics_service.dart';
 import '../models/play_mode.dart';
 import '../widgets/audio_quality_selector.dart';
-import '../extensions/extensions.dart';
-import '../utils/error_handler.dart';
-import 'dart:ui';
-import 'package:flutter_lyric/lyrics_reader.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
+import '../widgets/draggable_window_area.dart';
+import '../utils/platform_utils.dart';
 
 
 class PlayerScreen extends StatefulWidget {
@@ -85,10 +82,11 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
         print('⚠️ 无本地歌词，使用API获取: ${song.title}');
         lyrics = await _apiService.getLyrics(songId: song.id);
         if (lyrics != null && lyrics.isNotEmpty) {
+          // 🔧 优化:移除不必要的 ! 操作符
           // 异步写回数据库，失败忽略
           LyricsService().saveLyrics(
             songId: song.id,
-            lyrics: lyrics!,
+            lyrics: lyrics,
             title: song.title,
             artist: song.artist,
           );
@@ -212,10 +210,11 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   ),
                 ),
                 // 模糊和暗化效果
+                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                 BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                   child: Container(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                   ),
                 ),
                 // 内容
@@ -253,28 +252,20 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   }
 
   Widget _buildAppBar(BuildContext context) {
-    final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
-    final isAndroid = !kIsWeb && Platform.isAndroid;
-    
+    final isDesktop = PlatformUtils.isDesktop;
+    final isAndroid = PlatformUtils.isAndroid;
+
     return Stack(
       children: [
         // 桌面端拖动区域
         if (isDesktop)
-          Positioned(
+          const Positioned(
             top: 0,
             left: 60,
             right: 60,
             height: 56,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onPanStart: (_) {
-                try {
-                  appWindow.startDragging();
-                } catch (e) {
-                  // 忽略错误
-                }
-              },
-              child: Container(color: Colors.transparent),
+            child: DraggableWindowArea(
+              child: SizedBox.expand(),
             ),
           ),
         // AppBar 内容
@@ -283,9 +274,10 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: IconButton(
@@ -297,7 +289,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               if (isAndroid)
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: IconButton(
@@ -330,12 +322,13 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               mainAxisSize: MainAxisSize.min,
               children: [
                 // 拖动指示器
+                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                 Container(
                   margin: const EdgeInsets.only(top: 12, bottom: 8),
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -348,7 +341,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   ),
                   trailing: Text(
                     musicProvider.audioQuality.label,
-                    style: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -370,7 +363,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   trailing: musicProvider.sleepTimer.isActive
                       ? Text(
                           musicProvider.sleepTimer.formatRemainingTime(),
-                          style: TextStyle(color: Colors.orange.withOpacity(0.8)),
+                          style: TextStyle(color: Colors.orange.withValues(alpha: 0.8)),
                         )
                       : null,
                   onTap: () {
@@ -387,7 +380,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   ),
                   trailing: Text(
                     '${musicProvider.playlist.length}首',
-                    style: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -417,12 +410,13 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
           mainAxisSize: MainAxisSize.min,
           children: [
             // 拖动指示器
+            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             Container(
               margin: const EdgeInsets.only(top: 12, bottom: 8),
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -521,12 +515,13 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
           child: Column(
             children: [
               // 拖动指示器
+              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
               Container(
                 margin: const EdgeInsets.only(top: 12, bottom: 8),
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.white.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -555,9 +550,10 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                           ),
                         );
                       },
+                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       child: Text(
                         '清空',
-                        style: TextStyle(color: Colors.red.withOpacity(0.8)),
+                        style: TextStyle(color: Colors.red.withValues(alpha: 0.8)),
                       ),
                     ),
                   ],
@@ -583,10 +579,11 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                             fit: BoxFit.cover,
                           ),
                         ),
+                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                         child: isPlaying
                             ? Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.6),
+                                  color: Colors.black.withValues(alpha: 0.6),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Icon(
@@ -609,7 +606,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                       subtitle: Text(
                         song.artist,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                           fontSize: 13,
                         ),
                         maxLines: 1,
@@ -654,17 +651,27 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 6),
-          Text(
-            artist,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-              color: Colors.white.withOpacity(0.6),
-              letterSpacing: 0.2,
+          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+          // 点击歌手名字返回主页并搜索该歌手
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
+                Navigator.pop(context, {'action': 'search', 'query': artist});
+              },
+              child: Text(
+                artist,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  letterSpacing: 0.2,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -675,6 +682,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     return Consumer<MusicProvider>(
       builder: (context, musicProvider, child) {
         // 如果歌词模型为空或没有歌词行，显示空状态
+        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
         if (lyricModel.lyrics.isEmpty) {
           return Container(
             height: 280,
@@ -682,13 +690,13 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             child: Text(
               '暂无歌词',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
                 fontSize: 14,
               ),
             ),
           );
         }
-        
+
         return Container(
           height: 280,
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -703,7 +711,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               child: Text(
                 '暂无歌词',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.white.withValues(alpha: 0.3),
                   fontSize: 14,
                 ),
               ),
@@ -721,7 +729,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       height: 2,
@@ -739,7 +747,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
 
 
   Widget _buildControlPanel(BuildContext context, MusicProvider musicProvider) {
-    final isAndroid = !kIsWeb && Platform.isAndroid;
+    final isAndroid = PlatformUtils.isAndroid;
     
     return Container(
       margin: EdgeInsets.symmetric(
@@ -747,11 +755,12 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
         vertical: isAndroid ? 12 : 20,
       ),
       padding: EdgeInsets.all(isAndroid ? 16 : 20),
+      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(isAndroid ? 20 : 24),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -781,14 +790,15 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     return Column(
       children: [
         SliderTheme(
+          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           data: SliderTheme.of(context).copyWith(
             trackHeight: 3,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
             activeTrackColor: Colors.white,
-            inactiveTrackColor: Colors.white.withOpacity(0.2),
+            inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
             thumbColor: Colors.white,
-            overlayColor: Colors.white.withOpacity(0.2),
+            overlayColor: Colors.white.withValues(alpha: 0.2),
           ),
           child: Slider(
             value: () {
@@ -812,19 +822,20 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             children: [
               Text(
                 musicProvider.formatDuration(musicProvider.currentPosition),
                 style: TextStyle(
                   fontSize: 11,
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.white.withValues(alpha: 0.6),
                 ),
               ),
               Text(
                 musicProvider.formatDuration(musicProvider.totalDuration),
                 style: TextStyle(
                   fontSize: 11,
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.white.withValues(alpha: 0.6),
                 ),
               ),
             ],
@@ -1025,10 +1036,11 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     double opacity = 1.0,
     Color? color,
   }) {
+    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
     return IconButton(
       icon: Icon(
         icon,
-        color: color ?? Colors.white.withOpacity(opacity * 0.9),
+        color: color ?? Colors.white.withValues(alpha: opacity * 0.9),
       ),
       iconSize: size,
       padding: EdgeInsets.zero,
@@ -1050,13 +1062,13 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha: 0.3),
             blurRadius: 20,
             spreadRadius: 1,
             offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 3),
           ),
@@ -1090,18 +1102,19 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     }
 
     return Builder(
+      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       builder: (context) => Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha: 0.05),
         ),
         child: IconButton(
           padding: EdgeInsets.zero,
           icon: Icon(
             volumeIcon,
-            color: Colors.white.withOpacity(0.9),
+            color: Colors.white.withValues(alpha: 0.9),
           ),
           iconSize: 24,
           onPressed: () {
@@ -1127,23 +1140,24 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
           return Stack(
             children: [
               Positioned(
-                left: buttonPosition.dx + buttonSize.width / 2 - 30,
+                left: buttonPosition.dx + buttonSize.width / 2 - 35, // 🔧 修复:调整居中位置
                 bottom: overlay.size.height - buttonPosition.dy + 10,
                 child: Material(
                   color: Colors.transparent,
+                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   child: Container(
-                    width: 60,
+                    width: 70, // 🔧 修复:增加宽度防止文本换行 (60 -> 70)
                     height: 240,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.85),
+                      color: Colors.black.withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withValues(alpha: 0.5),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -1182,14 +1196,15 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                           child: RotatedBox(
                             quarterTurns: 3,
                             child: SliderTheme(
+                              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                               data: SliderThemeData(
                                 trackHeight: 6,
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
                                 activeTrackColor: Colors.white,
-                                inactiveTrackColor: Colors.white.withOpacity(0.2),
+                                inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
                                 thumbColor: Colors.white,
-                                overlayColor: Colors.white.withOpacity(0.2),
+                                overlayColor: Colors.white.withValues(alpha: 0.2),
                               ),
                               child: Slider(
                                 value: musicProvider.volume,
@@ -1202,17 +1217,20 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                         ),
                         const SizedBox(height: 12),
                         // 音量百分比
+                        // 🔧 修复:设置固定宽度防止100%时换行
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          width: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             '${(musicProvider.volume * 100).round()}',
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
                           ),

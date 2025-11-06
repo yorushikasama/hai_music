@@ -47,10 +47,11 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   Icon(
                     Icons.article_outlined,
                     size: 80,
-                    color: colors.textSecondary.withOpacity(0.5),
+                    color: colors.textSecondary.withValues(alpha: 0.5),
                   ),
                   SizedBox(height: 16),
                   Text(
@@ -65,7 +66,7 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
                     '尝试播放音乐来生成日志',
                     style: TextStyle(
                       fontSize: 14,
-                      color: colors.textSecondary.withOpacity(0.7),
+                      color: colors.textSecondary.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -85,15 +86,16 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
               Color textColor = colors.textPrimary;
               Color bgColor = colors.surface;
 
+              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
               if (isError) {
                 textColor = Colors.red;
-                bgColor = Colors.red.withOpacity(0.1);
+                bgColor = Colors.red.withValues(alpha: 0.1);
               } else if (isSuccess) {
                 textColor = Colors.green;
-                bgColor = Colors.green.withOpacity(0.1);
+                bgColor = Colors.green.withValues(alpha: 0.1);
               } else if (isWarning) {
                 textColor = Colors.orange;
-                bgColor = Colors.orange.withOpacity(0.1);
+                bgColor = Colors.orange.withValues(alpha: 0.1);
               }
 
               return Container(
@@ -103,7 +105,7 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
                   color: bgColor,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: textColor.withOpacity(0.3),
+                    color: textColor.withValues(alpha: 0.3),
                     width: 1,
                   ),
                 ),

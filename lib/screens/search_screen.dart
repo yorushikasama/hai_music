@@ -1,20 +1,21 @@
-import 'dart:io' show Platform;
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../models/song.dart';
 import '../providers/music_provider.dart';
 import '../theme/app_styles.dart';
 import '../providers/theme_provider.dart';
+import '../utils/platform_utils.dart';
+import '../widgets/draggable_window_area.dart';
 import '../services/music_api_service.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
+import '../services/preferences_cache_service.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final String? initialQuery;
+  
+  const SearchScreen({super.key, this.initialQuery});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -43,6 +44,28 @@ class _SearchScreenState extends State<SearchScreen> {
     super.initState();
     _loadSearchHistory();
     _scrollController.addListener(_onScroll);
+    
+    // 如果有初始搜索词，自动执行搜索
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+      print('📝 SearchScreen initState: ${widget.initialQuery}');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchController.text = widget.initialQuery!;
+        _performSearch(widget.initialQuery!);
+      });
+    }
+  }
+  
+  @override
+  void didUpdateWidget(SearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 当 initialQuery 参数变化时，执行新的搜索
+    if (widget.initialQuery != null && 
+        widget.initialQuery!.isNotEmpty && 
+        widget.initialQuery != oldWidget.initialQuery) {
+      print('📝 SearchScreen didUpdateWidget: ${widget.initialQuery}');
+      _searchController.text = widget.initialQuery!;
+      _performSearch(widget.initialQuery!);
+    }
   }
 
   @override
@@ -71,8 +94,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 加载搜索历史
   Future<void> _loadSearchHistory() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final history = prefs.getStringList(_historyKey) ?? [];
+      final prefsCache = PreferencesCacheService();
+      await prefsCache.init();
+      final history = await prefsCache.getStringList(_historyKey) ?? [];
       setState(() {
         _searchHistory = history;
       });
@@ -84,10 +108,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 保存搜索历史
   Future<void> _saveSearchHistory(String query) async {
     if (query.trim().isEmpty) return;
-    
+
     try {
-      final prefs = await SharedPreferences.getInstance();
-      
+      final prefsCache = PreferencesCacheService();
+      await prefsCache.init();
+
       // 移除重复项
       _searchHistory.remove(query);
       // 添加到开头
@@ -96,8 +121,8 @@ class _SearchScreenState extends State<SearchScreen> {
       if (_searchHistory.length > _maxHistoryCount) {
         _searchHistory = _searchHistory.sublist(0, _maxHistoryCount);
       }
-      
-      await prefs.setStringList(_historyKey, _searchHistory);
+
+      await prefsCache.setStringList(_historyKey, _searchHistory);
       setState(() {});
     } catch (e) {
       // 忽略错误
@@ -107,8 +132,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 清空搜索历史
   Future<void> _clearSearchHistory() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_historyKey);
+      final prefsCache = PreferencesCacheService();
+      await prefsCache.init();
+      await prefsCache.remove(_historyKey);
       setState(() {
         _searchHistory = [];
       });
@@ -142,6 +168,8 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 执行搜索（第一页）
   void _performSearch(String query) async {
     if (query.trim().isEmpty) return;
+    
+    print('🔎 执行搜索: $query');
 
     setState(() {
       _isSearching = true;
@@ -237,21 +265,8 @@ class _SearchScreenState extends State<SearchScreen> {
       body: Column(
         children: [
           // 桌面端拖动区域
-          if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
-            GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onPanStart: (_) {
-                try {
-                  appWindow.startDragging();
-                } catch (e) {
-                  // 忽略错误
-                }
-              },
-              child: Container(
-                height: 40,
-                color: Colors.transparent,
-              ),
-            ),
+          if (PlatformUtils.isDesktop)
+            const DraggableWindowBar(),
           Expanded(
             child: SafeArea(
               child: Column(
@@ -534,10 +549,11 @@ class _SearchScreenState extends State<SearchScreen> {
               width: 56,
               height: 56,
               fit: BoxFit.cover,
+              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
               placeholder: (context, url) => Container(
                 width: 56,
                 height: 56,
-                color: colors.card.withOpacity(0.5),
+                color: colors.card.withValues(alpha: 0.5),
               ),
               errorWidget: (context, url, error) => Container(
                 width: 56,

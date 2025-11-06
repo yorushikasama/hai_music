@@ -10,7 +10,9 @@ import '../models/play_mode.dart';
 import 'audio_quality_selector.dart';
 
 class MiniPlayer extends StatelessWidget {
-  const MiniPlayer({super.key});
+  final void Function(String artistName)? onArtistTap;
+  
+  const MiniPlayer({super.key, this.onArtistTap});
 
   @override
   Widget build(BuildContext context) {
@@ -48,13 +50,20 @@ class MiniPlayer extends StatelessWidget {
                         children: [
                           // 封面（点击进入歌词页面）
                           GestureDetector(
-                            onTap: () {
-                              Navigator.push(
+                            onTap: () async {
+                              final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const PlayerScreen(),
                                 ),
                               );
+                              // 处理从播放器页面返回的搜索请求
+                              if (result is Map && 
+                                  result['action'] == 'search' && 
+                                  result['query'] != null &&
+                                  onArtistTap != null) {
+                                onArtistTap!(result['query']);
+                              }
                             },
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
@@ -66,7 +75,8 @@ class MiniPlayer extends StatelessWidget {
                                 placeholder: (context, url) => Container(
                                   width: 56,
                                   height: 56,
-                                  color: colors.card.withOpacity(0.5),
+                                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                                  color: colors.card.withValues(alpha: 0.5),
                                 ),
                                 errorWidget: (context, url, error) => Container(
                                   width: 56,
@@ -99,14 +109,31 @@ class MiniPlayer extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 SizedBox(height: AppStyles.spacingXS),
-                                Text(
-                                  song.artist,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: colors.textSecondary,
+                                MouseRegion(
+                                  cursor: onArtistTap != null 
+                                      ? SystemMouseCursors.click 
+                                      : SystemMouseCursors.basic,
+                                  child: GestureDetector(
+                                    onTap: onArtistTap != null
+                                        ? () {
+                                            print('点击歌手: ${song.artist}');
+                                            onArtistTap!(song.artist);
+                                          }
+                                        : null,
+                                    behavior: HitTestBehavior.opaque,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      child: Text(
+                                        song.artist,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: colors.textSecondary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
@@ -127,7 +154,8 @@ class MiniPlayer extends StatelessWidget {
                         activeTrackColor: colors.accent,
                         inactiveTrackColor: colors.border,
                         thumbColor: colors.accent,
-                        overlayColor: colors.accent.withOpacity(0.2),
+                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                        overlayColor: colors.accent.withValues(alpha: 0.2),
                       ),
                       child: Slider(
                         value: () {
@@ -169,9 +197,10 @@ class MiniPlayer extends StatelessWidget {
               : Icons.favorite_border,
         ),
         iconSize: 28,
+        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
         color: musicProvider.isFavorite(songId)
             ? const Color(0xFF1DB954) // Spotify 绿色
-            : colors.textSecondary.withOpacity(0.7),
+            : colors.textSecondary.withValues(alpha: 0.7),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(
           minWidth: 40,
@@ -189,9 +218,10 @@ class MiniPlayer extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
+          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -358,23 +388,25 @@ class MiniPlayer extends StatelessWidget {
           return Stack(
             children: [
               Positioned(
-                left: buttonPosition.dx + buttonSize.width / 2 - 30, // 居中对齐按钮
+                left: buttonPosition.dx + buttonSize.width / 2 - 35, // 🔧 修复:调整居中位置
                 bottom: overlay.size.height - buttonPosition.dy + 10, // 按钮上方 10px
                 child: Material(
                   color: Colors.transparent,
                   child: Container(
-                    width: 60,
+                    width: 70, // 🔧 修复:增加宽度防止文本换行 (60 -> 70)
                     height: 240,
+                    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                     decoration: BoxDecoration(
-                      color: colors.surface.withOpacity(0.95),
+                      color: colors.surface.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: colors.border,
                         width: 1,
                       ),
+                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -418,9 +450,10 @@ class MiniPlayer extends StatelessWidget {
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
                                 activeTrackColor: colors.accent,
-                                inactiveTrackColor: colors.border.withOpacity(0.3),
+                                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                                inactiveTrackColor: colors.border.withValues(alpha: 0.3),
                                 thumbColor: Colors.white,
-                                overlayColor: colors.accent.withOpacity(0.2),
+                                overlayColor: colors.accent.withValues(alpha: 0.2),
                               ),
                               child: Slider(
                                 value: musicProvider.volume,
@@ -434,13 +467,16 @@ class MiniPlayer extends StatelessWidget {
                         const SizedBox(height: 12),
                         // 音量百分比
                         Container(
+                          width: 42, // 🔧 修复:固定宽度防止 100% 时换行
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           decoration: BoxDecoration(
-                            color: colors.accent.withOpacity(0.1),
+                            color: colors.accent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             '${(musicProvider.volume * 100).round()}',
+                            textAlign: TextAlign.center, // 🔧 修复:居中对齐
                             style: TextStyle(
                               color: colors.accent,
                               fontSize: 14,

@@ -295,7 +295,8 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                   ),
                 ),
                 value: _enableSync,
-                activeColor: colors.accent,
+                // 🔧 优化:使用 activeTrackColor 替代已弃用的 activeColor
+                activeTrackColor: colors.accent,
                 onChanged: (value) {
                   setState(() => _enableSync = value);
                 },
@@ -479,12 +480,13 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
           hintText: hint,
           helperText: helperText,
           helperMaxLines: 2,
+          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           helperStyle: TextStyle(
-            color: colors.textSecondary.withOpacity(0.7),
+            color: colors.textSecondary.withValues(alpha: 0.7),
             fontSize: 12,
           ),
           labelStyle: TextStyle(color: colors.textSecondary),
-          hintStyle: TextStyle(color: colors.textSecondary.withOpacity(0.5)),
+          hintStyle: TextStyle(color: colors.textSecondary.withValues(alpha: 0.5)),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
             borderSide: BorderSide.none,
@@ -505,7 +507,8 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
       decoration: AppStyles.glassDecoration(
         color: colors.accent,
         opacity: 0.1,
-        borderColor: colors.accent.withOpacity(0.3),
+        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+        borderColor: colors.accent.withValues(alpha: 0.3),
         isLight: colors.isLight,
       ),
       child: Column(

@@ -1,12 +1,11 @@
-import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'providers/music_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/preferences_service.dart';
+import 'utils/platform_utils.dart';
 import 'window_config_desktop.dart' if (dart.library.html) 'window_config_web.dart';
 
 void main() async {
@@ -23,7 +22,7 @@ void main() async {
   runApp(MyApp(themeProvider: themeProvider));
   
   // 只在桌面平台配置窗口
-  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+  if (PlatformUtils.isDesktop) {
     configureWindow();
   }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_styles.dart';
+import '../services/preferences_cache_service.dart';
 
 enum AppThemeMode {
   dark,
@@ -24,8 +24,9 @@ class ThemeProvider extends ChangeNotifier {
   /// 初始化时加载保存的主题
   Future<void> loadTheme() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final themeIndex = prefs.getInt(_themeKey);
+      final prefsCache = PreferencesCacheService();
+      await prefsCache.init();
+      final themeIndex = await prefsCache.getInt(_themeKey);
       if (themeIndex != null && themeIndex < AppThemeMode.values.length) {
         _currentTheme = AppThemeMode.values[themeIndex];
         notifyListeners();
@@ -39,11 +40,12 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> setTheme(AppThemeMode theme) async {
     _currentTheme = theme;
     notifyListeners();
-    
+
     // 保存到本地
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_themeKey, theme.index);
+      final prefsCache = PreferencesCacheService();
+      await prefsCache.init();
+      await prefsCache.setInt(_themeKey, theme.index);
     } catch (e) {
       // 忽略保存错误
     }
@@ -160,9 +162,10 @@ class ThemeProvider extends ChangeNotifier {
       ),
 
       // NavigationBar 主题
+      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: c.surface.withOpacity(0.75),
-        indicatorColor: c.accent.withOpacity(0.12),
+        backgroundColor: c.surface.withValues(alpha: 0.75),
+        indicatorColor: c.accent.withValues(alpha: 0.12),
         elevation: 0,
         labelTextStyle: WidgetStateProperty.all(
           TextStyle(fontSize: 12, color: c.textSecondary),
@@ -176,14 +179,15 @@ class ThemeProvider extends ChangeNotifier {
       ),
 
       // Card 主题
+      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       cardTheme: CardThemeData(
-        color: c.card.withOpacity(0.6),
+        color: c.card.withValues(alpha: 0.6),
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
           side: BorderSide(color: c.border),
         ),
-        shadowColor: Colors.black.withOpacity(isLight ? 0.05 : 0.15),
+        shadowColor: Colors.black.withValues(alpha: isLight ? 0.05 : 0.15),
       ),
 
       // IconButton 主题

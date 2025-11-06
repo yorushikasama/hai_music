@@ -25,21 +25,22 @@ class PlaylistCard extends StatelessWidget {
       child: SizedBox(
         width: 180,
         child: Container(
+          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           decoration: BoxDecoration(
             color: colors.card,
             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
             border: Border.all(
-              color: colors.border.withOpacity(0.5),
+              color: colors.border.withValues(alpha: 0.5),
               width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(colors.isLight ? 0.08 : 0.3),
+                color: Colors.black.withValues(alpha: colors.isLight ? 0.08 : 0.3),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
               BoxShadow(
-                color: Colors.black.withOpacity(colors.isLight ? 0.04 : 0.15),
+                color: Colors.black.withValues(alpha: colors.isLight ? 0.04 : 0.15),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -75,6 +76,7 @@ class PlaylistCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -82,7 +84,7 @@ class PlaylistCard extends StatelessWidget {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.transparent,
-                              Colors.black.withOpacity(0.5),
+                              Colors.black.withValues(alpha: 0.5),
                             ],
                           ),
                         ),
@@ -96,7 +98,7 @@ class PlaylistCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
+                            color: Colors.black.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(

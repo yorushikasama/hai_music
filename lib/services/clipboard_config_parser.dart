@@ -76,16 +76,18 @@ class ClipboardConfigParser {
         supabaseUrl: supabaseUrl,
         supabaseAnonKey: supabaseAnonKey,
         r2Endpoint: r2Endpoint,
-        r2AccessKey: r2AccessKeyId!,
-        r2SecretKey: r2SecretAccessKey!,
+        // 🔧 优化:移除不必要的 ! 操作符
+        r2AccessKey: r2AccessKeyId,
+        r2SecretKey: r2SecretAccessKey,
         r2BucketName: r2BucketName,
         r2Region: r2Region ?? 'auto',
         r2CustomDomain: r2CustomDomain,
       );
 
+      // 🔧 优化:移除不必要的字符串插值大括号
       print('✅ 成功解析配置');
-      print('  Supabase URL: ${supabaseUrl}');
-      print('  R2 Bucket: ${r2BucketName}');
+      print('  Supabase URL: $supabaseUrl');
+      print('  R2 Bucket: $r2BucketName');
       print('  R2 Custom Domain: ${r2CustomDomain ?? "未设置"}');
 
       return config;

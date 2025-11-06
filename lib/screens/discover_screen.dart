@@ -1,7 +1,5 @@
-import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -11,13 +9,13 @@ import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
 import '../utils/responsive.dart';
-import '../widgets/playlist_card.dart';
+import '../utils/platform_utils.dart';
 import '../widgets/theme_selector.dart';
+import '../widgets/draggable_window_area.dart';
 import '../services/music_api_service.dart';
 import '../services/playlist_scraper_service.dart';
+import '../services/data_cache_service.dart';
 import 'playlist_detail_screen.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -29,21 +27,23 @@ class DiscoverScreen extends StatefulWidget {
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final _apiService = MusicApiService();
   final _scraperService = PlaylistScraperService();
+  final _cacheService = DataCacheService();
   final _playlistScrollController = ScrollController();
   final _dailyScrollController = ScrollController();
   List<Song> _dailyRecommendations = [];
   List<RecommendedPlaylist> _recommendedPlaylists = [];
   bool _isLoading = true;
   bool _isLoadingPlaylists = true;
-  
-  static const String _playlistsCacheKey = 'cached_playlists';
-  static const String _playlistsTimestampKey = 'playlists_timestamp';
-  static const String _dailySongsCacheKey = 'cached_daily_songs';
-  static const String _dailySongsTimestampKey = 'daily_songs_timestamp';
 
   @override
   void initState() {
     super.initState();
+    _initCache();
+  }
+
+  /// 初始化缓存服务
+  Future<void> _initCache() async {
+    await _cacheService.init();
     _loadRecommendedPlaylists();
   }
 
@@ -62,24 +62,26 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
 
     setState(() => _isLoading = true);
-    
+
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedData = prefs.getStringList(_dailySongsCacheKey);
-      final cachedTimestamp = prefs.getInt(_dailySongsTimestampKey) ?? 0;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      
-      // 检查缓存是否过期(24小时)
-      final cacheExpired = (now - cachedTimestamp) > 24 * 60 * 60 * 1000;
-      
-      if (forceRefresh || cacheExpired || cachedData == null || cachedData.isEmpty) {
-        // 生成新的每日推荐
-        await _generateDailyRecommendations(prefs, now);
-      } else {
-        // 使用缓存
-        _loadDailySongsFromCache(prefs);
+      // 尝试从缓存加载
+      if (!forceRefresh) {
+        final cachedSongs = await _cacheService.getDailySongs();
+        if (cachedSongs != null && cachedSongs.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _dailyRecommendations = cachedSongs;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
       }
+
+      // 生成新的每日推荐
+      await _generateDailyRecommendations();
     } catch (e) {
+      print('❌ [Discover] 加载每日推荐失败: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -87,57 +89,67 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
   
   /// 生成新的每日推荐
-  Future<void> _generateDailyRecommendations(SharedPreferences prefs, int now) async {
+  Future<void> _generateDailyRecommendations() async {
     try {
       final random = Random();
       final allSongs = <Song>[];
-      
+
       // 随机选择2-3个歌单
       final playlistCount = min(3, _recommendedPlaylists.length);
       final selectedPlaylists = <RecommendedPlaylist>[];
       final playlistsCopy = List<RecommendedPlaylist>.from(_recommendedPlaylists);
-      
+
       for (var i = 0; i < playlistCount; i++) {
         if (playlistsCopy.isEmpty) break;
         final index = random.nextInt(playlistsCopy.length);
         selectedPlaylists.add(playlistsCopy.removeAt(index));
       }
-      
-      // 并行获取所有歌单的歌曲（性能优化）
+
+      // 并行获取所有歌单的歌曲（性能优化 + 超时控制）
       print('🚀 并行加载 ${selectedPlaylists.length} 个歌单...');
-      final futures = selectedPlaylists.map((playlist) => 
+      final futures = selectedPlaylists.map((playlist) =>
         _apiService.getPlaylistSongs(
           playlistId: playlist.id,
           page: 1,
           num: 30,
         ).then((result) => result['songs'] as List<Song>)
+         .timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            print('⏰ 加载歌单超时: ${playlist.title}');
+            return <Song>[];
+          },
+        )
          .catchError((e) {
           print('⚠️ 加载歌单失败: ${playlist.title}');
           return <Song>[];
         })
       ).toList();
 
-      final songLists = await Future.wait(futures);
-      
+      // 添加总超时控制 (30秒)
+      final songLists = await Future.wait(futures).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          print('⏰ 并行加载总超时');
+          return <List<Song>>[];
+        },
+      );
+
       for (final songs in songLists) {
         if (songs.isNotEmpty) {
           allSongs.addAll(songs);
         }
       }
       print('✅ 并行加载完成，共获取 ${allSongs.length} 首歌曲');
-      
+
       // 从所有歌曲中随机选择20首
       if (allSongs.isNotEmpty) {
         allSongs.shuffle(random);
         final selectedSongs = allSongs.take(20).toList();
-        
+
         // 保存到缓存
-        final songsJson = selectedSongs.map((s) => 
-          '${s.id}|||${s.title}|||${s.artist}|||${s.album}|||${s.coverUrl}'
-        ).toList();
-        await prefs.setStringList(_dailySongsCacheKey, songsJson);
-        await prefs.setInt(_dailySongsTimestampKey, now);
-        
+        await _cacheService.saveDailySongs(selectedSongs);
+
         if (mounted) {
           setState(() {
             _dailyRecommendations = selectedSongs;
@@ -146,9 +158,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         }
       } else {
         // 生成失败,尝试使用旧缓存
-        final cachedData = prefs.getStringList(_dailySongsCacheKey);
-        if (cachedData != null && cachedData.isNotEmpty) {
-          _loadDailySongsFromCache(prefs);
+        final cachedSongs = await _cacheService.getDailySongs(cacheHours: 720); // 30天内的旧缓存
+        if (cachedSongs != null && cachedSongs.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _dailyRecommendations = cachedSongs;
+              _isLoading = false;
+            });
+          }
         } else {
           if (mounted) {
             setState(() => _isLoading = false);
@@ -156,116 +173,75 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         }
       }
     } catch (e) {
+      print('❌ [Discover] 生成每日推荐失败: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
-    }
-  }
-  
-  /// 从缓存加载每日推荐
-  void _loadDailySongsFromCache(SharedPreferences prefs) {
-    final cachedSongs = prefs.getStringList(_dailySongsCacheKey) ?? [];
-    
-    final songs = cachedSongs.map((json) {
-      final parts = json.split('|||');
-      if (parts.length == 5) {
-        return Song(
-          id: parts[0],
-          title: parts[1],
-          artist: parts[2],
-          album: parts[3],
-          coverUrl: parts[4],
-          audioUrl: '',
-          duration: 180, // 3分钟
-          platform: 'qq',
-        );
-      }
-      return null;
-    }).whereType<Song>().toList();
-    
-    if (mounted) {
-      setState(() {
-        _dailyRecommendations = songs;
-        _isLoading = false;
-      });
     }
   }
 
   /// 加载推荐歌单
   Future<void> _loadRecommendedPlaylists() async {
     setState(() => _isLoadingPlaylists = true);
-    
+
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedData = prefs.getStringList(_playlistsCacheKey);
-      final cachedTimestamp = prefs.getInt(_playlistsTimestampKey) ?? 0;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      
-      // 检查缓存是否过期(24小时)
-      final cacheExpired = (now - cachedTimestamp) > 24 * 60 * 60 * 1000;
-      
-      if (cacheExpired || cachedData == null || cachedData.isEmpty) {
-        // 爬取新数据
-        final playlists = await _scraperService.fetchRecommendedPlaylists();
-        
-        if (playlists.isNotEmpty) {
-          // 保存到缓存
-          final playlistsJson = playlists.map((p) => '${p.id}|||${p.title}|||${p.coverUrl}').toList();
-          await prefs.setStringList(_playlistsCacheKey, playlistsJson);
-          await prefs.setInt(_playlistsTimestampKey, now);
-          
+      // 尝试从缓存加载
+      final cachedPlaylists = await _cacheService.getRecommendedPlaylists();
+      if (cachedPlaylists != null && cachedPlaylists.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _recommendedPlaylists = cachedPlaylists;
+            _isLoadingPlaylists = false;
+          });
+          // 加载每日推荐
+          _loadDailyRecommendations();
+        }
+        return;
+      }
+
+      // 缓存不存在或已过期,爬取新数据
+      final playlists = await _scraperService.fetchRecommendedPlaylists().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          print('⏰ 爬取推荐歌单超时');
+          return <RecommendedPlaylist>[];
+        },
+      );
+
+      if (playlists.isNotEmpty) {
+        // 保存到缓存
+        await _cacheService.saveRecommendedPlaylists(playlists);
+
+        if (mounted) {
+          setState(() {
+            _recommendedPlaylists = playlists;
+            _isLoadingPlaylists = false;
+          });
+          // 加载每日推荐
+          _loadDailyRecommendations();
+        }
+      } else {
+        // 爬取失败,尝试使用旧缓存 (30天内)
+        final oldCache = await _cacheService.getRecommendedPlaylists(cacheHours: 720);
+        if (oldCache != null && oldCache.isNotEmpty) {
           if (mounted) {
             setState(() {
-              _recommendedPlaylists = playlists;
+              _recommendedPlaylists = oldCache;
               _isLoadingPlaylists = false;
             });
-            // 加载每日推荐
             _loadDailyRecommendations();
           }
         } else {
-          // 爬取失败,尝试使用旧缓存
-          if (cachedData != null && cachedData.isNotEmpty) {
-            _loadPlaylistsFromCache(prefs);
-          } else {
-            if (mounted) {
-              setState(() => _isLoadingPlaylists = false);
-            }
+          if (mounted) {
+            setState(() => _isLoadingPlaylists = false);
           }
         }
-      } else {
-        // 使用缓存
-        _loadPlaylistsFromCache(prefs);
       }
     } catch (e) {
+      print('❌ [Discover] 加载推荐歌单失败: $e');
       if (mounted) {
         setState(() => _isLoadingPlaylists = false);
       }
-    }
-  }
-  
-  /// 从缓存加载歌单
-  void _loadPlaylistsFromCache(SharedPreferences prefs) {
-    final cachedPlaylists = prefs.getStringList(_playlistsCacheKey) ?? [];
-    
-    final playlists = cachedPlaylists.map((json) {
-      final parts = json.split('|||');
-      if (parts.length == 3) {
-        return RecommendedPlaylist(
-          id: parts[0],
-          title: parts[1],
-          coverUrl: parts[2],
-        );
-      }
-      return null;
-    }).whereType<RecommendedPlaylist>().toList();
-    
-    if (mounted) {
-      setState(() {
-        _recommendedPlaylists = playlists;
-        _isLoadingPlaylists = false;
-      });
-      // 加载每日推荐
-      _loadDailyRecommendations();
     }
   }
 
@@ -274,7 +250,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final playlists = Playlist.getMockData();
 
-    final isWeb = kIsWeb;
+    final isWeb = PlatformUtils.isWeb;
     final isDesktop = Responsive.isDesktop(context);
     final padding = Responsive.getHorizontalPadding(context);
 
@@ -302,22 +278,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       titlePadding: EdgeInsets.only(left: padding.left, bottom: 16),
                     ),
                     // 桌面端拖动区域
-                    if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
-                      Positioned(
+                    if (PlatformUtils.isDesktop)
+                      const Positioned(
                         top: 0,
                         left: 0,
                         right: 0,
                         height: 40,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onPanStart: (_) {
-                            try {
-                              appWindow.startDragging();
-                            } catch (e) {
-                              // 忽略错误
-                            }
-                          },
-                        ),
+                        child: DraggableWindowBar(),
                       ),
                   ],
                 ),
@@ -485,13 +452,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   bottom: 0,
                   child: Center(
                     child: Container(
-                      margin: const EdgeInsets.only(left: 8),
+                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                    margin: const EdgeInsets.only(left: 8),
                       decoration: BoxDecoration(
-                        color: colors.card.withOpacity(0.9),
+                        color: colors.card.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -518,13 +486,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   bottom: 0,
                   child: Center(
                     child: Container(
-                      margin: const EdgeInsets.only(right: 8),
+                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                    margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
-                        color: colors.card.withOpacity(0.9),
+                        color: colors.card.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -569,8 +538,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 IconButton(
                   icon: Icon(Icons.refresh, color: colors.accent),
                   onPressed: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.remove(_playlistsTimestampKey);
+                    await _cacheService.clearRecommendedPlaylists();
                     _loadRecommendedPlaylists();
                   },
                   tooltip: '刷新推荐',
@@ -654,14 +622,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   top: 0,
                   bottom: 0,
                   child: Center(
+                    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                     child: Container(
                       margin: const EdgeInsets.only(left: 8),
                       decoration: BoxDecoration(
-                        color: colors.card.withOpacity(0.9),
+                        color: colors.card.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -687,14 +656,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   top: 0,
                   bottom: 0,
                   child: Center(
+                    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                     child: Container(
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
-                        color: colors.card.withOpacity(0.9),
+                        color: colors.card.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -763,50 +733,55 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             final List<Song> songs = result['songs'] as List<Song>;
             final int totalCount = result['totalCount'] as int;
 
-            if (mounted) {
-              Navigator.pop(context); // 关闭加载对话框
-              
-              // 创建包含歌曲的Playlist对象
-              final playlistObj = Playlist(
-                id: playlist.id,
-                name: playlist.title,
-                coverUrl: playlist.coverUrl,
-                description: '',
-                songs: songs,
-              );
-              
-              // 跳转到歌单详情页
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PlaylistDetailScreen(
-                    playlist: playlistObj,
-                    totalCount: totalCount,
-                    qqNumber: '', // 推荐歌单不需要QQ号
-                  ),
+            if (!mounted) return;
+
+            Navigator.pop(context); // 关闭加载对话框
+
+            // 创建包含歌曲的Playlist对象
+            final playlistObj = Playlist(
+              id: playlist.id,
+              name: playlist.title,
+              coverUrl: playlist.coverUrl,
+              description: '',
+              songs: songs,
+            );
+
+            if (!mounted) return;
+
+            // 跳转到歌单详情页
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PlaylistDetailScreen(
+                  playlist: playlistObj,
+                  totalCount: totalCount,
+                  qqNumber: '', // 推荐歌单不需要QQ号
                 ),
-              );
-            }
+              ),
+            );
           } catch (e) {
-            if (mounted) {
-              Navigator.pop(context); // 关闭加载对话框
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('加载歌单失败,请稍后重试'),
-                  backgroundColor: colors.card,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
+            if (!mounted) return;
+
+            Navigator.pop(context); // 关闭加载对话框
+
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('加载歌单失败,请稍后重试'),
+                backgroundColor: colors.card,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           }
         },
         child: Container(
           width: 200,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-            boxShadow: [
+            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+          boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -822,11 +797,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                     child: AspectRatio(
                       aspectRatio: 1,
+                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       child: CachedNetworkImage(
                         imageUrl: playlist.coverUrl,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
-                          color: colors.card.withOpacity(0.5),
+                          color: colors.card.withValues(alpha: 0.5),
                           child: Center(
                             child: CircularProgressIndicator(
                               color: colors.accent,
@@ -841,14 +817,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               end: Alignment.bottomRight,
                               colors: [
                                 colors.card,
-                                colors.card.withOpacity(0.7),
+                                colors.card.withValues(alpha: 0.7),
                               ],
                             ),
                           ),
                           child: Icon(
                             Icons.music_note_rounded,
                             size: 64,
-                            color: colors.textSecondary.withOpacity(0.5),
+                            color: colors.textSecondary.withValues(alpha: 0.5),
                           ),
                         ),
                       ),
@@ -864,12 +840,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           onTap: null, // 由外层GestureDetector处理
                           child: Container(
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(
+                              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                            gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
                                   Colors.transparent,
-                                  Colors.black.withOpacity(0.3),
+                                  Colors.black.withValues(alpha: 0.3),
                                 ],
                               ),
                             ),
@@ -936,11 +913,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                             child: CachedNetworkImage(
                               imageUrl: song.coverUrl,
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
-                                color: colors.card.withOpacity(0.5),
+                                color: colors.card.withValues(alpha: 0.5),
                               ),
                               errorWidget: (context, url, error) => Container(
                                 color: colors.card,
@@ -952,6 +930,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               ),
                             ),
                           ),
+                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           if (coverOverlay > 0)
                             Container(
                               decoration: BoxDecoration(
@@ -961,7 +940,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                   end: Alignment.bottomCenter,
                                   colors: [
                                     Colors.transparent,
-                                    Colors.black.withOpacity(coverOverlay),
+                                    Colors.black.withValues(alpha: coverOverlay),
                                   ],
                                 ),
                               ),

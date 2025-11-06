@@ -28,15 +28,16 @@ class AppStyles {
   static const double sidebarWidth = 240.0;
 
   // ============ 阴影（根据主题亮暗自动调整） ============
+  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
   static List<BoxShadow> getShadows(bool isLight) {
     return [
       BoxShadow(
-        color: Colors.black.withOpacity(isLight ? 0.05 : 0.15),
+        color: Colors.black.withValues(alpha: isLight ? 0.05 : 0.15),
         blurRadius: isLight ? 16 : 15,
         offset: const Offset(0, 4),
       ),
       BoxShadow(
-        color: Colors.black.withOpacity(isLight ? 0.03 : 0.1),
+        color: Colors.black.withValues(alpha: isLight ? 0.03 : 0.1),
         blurRadius: isLight ? 24 : 30,
         offset: const Offset(0, 8),
       ),
@@ -44,6 +45,7 @@ class AppStyles {
   }
 
   // ============ 毛玻璃装饰生成器 ============
+  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
   static BoxDecoration glassDecoration({
     required Color color,
     required double opacity,
@@ -52,7 +54,7 @@ class AppStyles {
     BorderRadius? borderRadius,
   }) {
     return BoxDecoration(
-      color: color.withOpacity(opacity),
+      color: color.withValues(alpha: opacity),
       borderRadius: borderRadius ?? BorderRadius.circular(radiusLarge),
       border: Border.all(color: borderColor, width: 1),
       boxShadow: getShadows(isLight),

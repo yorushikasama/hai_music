@@ -1,6 +1,5 @@
-import 'dart:io' show Platform;
+import 'dart:async';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:audio_service/audio_service.dart';
@@ -13,9 +12,13 @@ import '../services/play_history_service.dart';
 import '../services/favorite_manager_service.dart';
 import '../services/sleep_timer_service.dart';
 import '../services/preferences_service.dart';
+import '../utils/platform_utils.dart';
 import '../config/app_constants.dart';
 
 class MusicProvider with ChangeNotifier {
+  // 🔧 优化:添加调试日志开关,生产环境可关闭以提升性能
+  static const bool _enableDebugLog = true;
+
   // 根据平台选择播放器
   // Windows: audioplayers (稳定)
   // Android/iOS: audio_service + just_audio (支持后台播放)
@@ -26,6 +29,9 @@ class MusicProvider with ChangeNotifier {
   final FavoriteManagerService _favoriteManager = FavoriteManagerService();
   final PlayHistoryService _historyService = PlayHistoryService();
   final SleepTimerService _sleepTimer = SleepTimerService();
+
+  // 🔧 优化:Stream 订阅管理,防止内存泄漏
+  final List<StreamSubscription> _subscriptions = [];
   
   Song? _currentSong;
   List<Song> _playlist = [];
@@ -62,9 +68,17 @@ class MusicProvider with ChangeNotifier {
     _initFavoriteManager();
   }
 
+  /// 🔧 优化:统一的日志输出方法
+  /// 生产环境可通过 _enableDebugLog 开关关闭
+  void _log(String message) {
+    if (_enableDebugLog) {
+      print(message);
+    }
+  }
+
   /// 初始化播放器（根据平台选择）
   Future<void> _initPlayer() async {
-    if (!kIsWeb && Platform.isWindows) {
+    if (PlatformUtils.isWindows) {
       _initAudioPlayer();
     } else {
       await _initAudioHandler();
@@ -75,35 +89,36 @@ class MusicProvider with ChangeNotifier {
   void _initAudioPlayer() {
     _audioPlayer = AudioPlayer();
     _audioHandlerInitialized = true;
-    
+
+    // 🔧 优化:保存订阅以便后续取消,防止内存泄漏
     // 监听播放状态
-    _audioPlayer!.onPlayerStateChanged.listen((state) {
+    _subscriptions.add(_audioPlayer!.onPlayerStateChanged.listen((state) {
       _isPlaying = state == PlayerState.playing;
       notifyListeners();
-    });
+    }));
 
     // 监听播放进度（限制更新频率为每500ms）
-    _audioPlayer!.onPositionChanged.listen((position) {
+    _subscriptions.add(_audioPlayer!.onPositionChanged.listen((position) {
       _currentPosition = position;
-      
+
       final now = DateTime.now();
-      if (_lastPositionNotifyTime == null || 
+      if (_lastPositionNotifyTime == null ||
           now.difference(_lastPositionNotifyTime!).inMilliseconds >= 500) {
         _lastPositionNotifyTime = now;
         notifyListeners();
       }
-    });
+    }));
 
     // 监听总时长
-    _audioPlayer!.onDurationChanged.listen((duration) {
+    _subscriptions.add(_audioPlayer!.onDurationChanged.listen((duration) {
       _totalDuration = duration;
       notifyListeners();
-    });
+    }));
 
     // 监听播放完成
-    _audioPlayer!.onPlayerComplete.listen((_) {
+    _subscriptions.add(_audioPlayer!.onPlayerComplete.listen((_) {
       _handlePlayComplete();
-    });
+    }));
   }
 
   /// 初始化 audio_service (Android/iOS)
@@ -120,40 +135,56 @@ class MusicProvider with ChangeNotifier {
         config: AudioServiceConfig(
           androidNotificationChannelId: 'com.haimusic.audio',
           androidNotificationChannelName: 'Hai Music',
-          androidNotificationOngoing: false,
-          androidStopForegroundOnPause: true,
+          // 🔧 设置为 true：播放时通知不可滑动删除，防止用户误删
+          androidNotificationOngoing: true,
+          // 🔧 修复：设置为 false 防止切歌时通知消失
+          // 当设置为 true 时，切歌过程中的短暂暂停会导致前台服务停止，通知被移除
+          androidStopForegroundOnPause: false,
         ),
       );
       _audioHandlerInitialized = true;
       
       // 设置播放完成回调（只设置一次）
       if (_audioHandler is MusicAudioHandler) {
-        (_audioHandler as MusicAudioHandler).onPlaybackCompleted = () {
+        final handler = _audioHandler as MusicAudioHandler;
+        handler.onPlaybackCompleted = () {
           _handlePlayComplete();
+        };
+
+        // 设置系统通知栏按钮回调
+        handler.onSkipToNext = () {
+          _log('🔔 [MusicProvider] 系统通知栏触发：下一首');
+          playNext();
+        };
+
+        handler.onSkipToPrevious = () {
+          _log('🔔 [MusicProvider] 系统通知栏触发：上一首');
+          playPrevious();
         };
       }
       
+      // 🔧 优化:保存订阅以便后续取消,防止内存泄漏
       // 监听播放状态
-      _audioHandler!.playbackState.listen((state) {
+      _subscriptions.add(_audioHandler!.playbackState.listen((state) {
         _isPlaying = state.playing;
         notifyListeners();
-      });
-      
+      }));
+
       // 监听当前媒体项
-      _audioHandler!.mediaItem.listen((item) {
+      _subscriptions.add(_audioHandler!.mediaItem.listen((item) {
         if (item != null) {
           _updateCurrentSongFromMediaItem(item);
         }
-      });
-      
+      }));
+
       // 监听播放位置（定期更新，限制通知频率）
-      Stream.periodic(const Duration(milliseconds: 500)).listen((_) {
+      _subscriptions.add(Stream.periodic(const Duration(milliseconds: 500)).listen((_) {
         if (_audioHandler != null) {
           _currentPosition = _audioHandler!.position;
           _totalDuration = _audioHandler!.duration ?? Duration.zero;
           notifyListeners();
         }
-      });
+      }));
     } catch (e, stackTrace) {
       print('❌ AudioService 初始化失败: $e');
       print('❌ 堆栈跟踪: $stackTrace');
@@ -192,7 +223,7 @@ class MusicProvider with ChangeNotifier {
       case PlayMode.single:
         // 单曲循环：seek到开头继续播放
         if (_currentSong != null) {
-          if (!kIsWeb && Platform.isWindows) {
+          if (PlatformUtils.isWindows) {
             await _audioPlayer?.seek(Duration.zero);
             await _audioPlayer?.resume();
           } else {
@@ -234,35 +265,35 @@ class MusicProvider with ChangeNotifier {
       songId: song.id,
       quality: _audioQuality.value,
     ).timeout(
-      Duration(seconds: AppConstants.playUrlTimeout),
+      const Duration(seconds: AppConstants.playUrlTimeout),
       onTimeout: () => null,
     );
 
-    // 保存到缓存
+    // 🔧 优化:保存到缓存
     if (url != null && url.isNotEmpty) {
       // 如果缓存已满，移除最旧的条目
       if (_urlCache.length >= _maxUrlCacheSize) {
-        String? oldestKey;
-        DateTime? oldestTime;
-        
-        _urlCacheTimestamp.forEach((key, time) {
-          if (oldestTime == null || time.isBefore(oldestTime!)) {
-            oldestTime = time;
-            oldestKey = key;
-          }
-        });
-        
-        if (oldestKey != null) {
-          _urlCache.remove(oldestKey);
-          _urlCacheTimestamp.remove(oldestKey);
-        }
+        _removeOldestCacheEntry();
       }
-      
+
       _urlCache[song.id] = url;
       _urlCacheTimestamp[song.id] = DateTime.now();
     }
 
     return url;
+  }
+
+  /// 🔧 优化:移除最旧的缓存条目
+  void _removeOldestCacheEntry() {
+    if (_urlCacheTimestamp.isEmpty) return;
+
+    // 找到最旧的条目
+    final oldestEntry = _urlCacheTimestamp.entries.reduce(
+      (a, b) => a.value.isBefore(b.value) ? a : b
+    );
+
+    _urlCache.remove(oldestEntry.key);
+    _urlCacheTimestamp.remove(oldestEntry.key);
   }
 
   /// 创建带URL的Song副本
@@ -280,49 +311,56 @@ class MusicProvider with ChangeNotifier {
     );
   }
 
-  /// 预加载下一首歌曲的URL
+  /// 🔧 优化:预加载下一首歌曲的URL
+  /// 添加错误处理,防止预加载失败影响播放
   void _preloadNextSong() async {
     if (_playlist.isEmpty) return;
 
-    // 计算下一首的索引（考虑播放模式）
-    int nextIndex;
-    if (_playMode == PlayMode.shuffle && _playlist.length > 1) {
-      // 随机播放：使用随机队列
-      if (_shuffleQueue.isEmpty || _shuffleQueue.length != _playlist.length) {
-        return; // 随机队列未初始化，跳过预加载
+    try {
+      // 计算下一首的索引（考虑播放模式）
+      int nextIndex;
+      if (_playMode == PlayMode.shuffle && _playlist.length > 1) {
+        // 随机播放：使用随机队列
+        if (_shuffleQueue.isEmpty || _shuffleQueue.length != _playlist.length) {
+          return; // 随机队列未初始化，跳过预加载
+        }
+        final nextQueueIndex = (_shuffleQueueIndex + 1) % _shuffleQueue.length;
+        nextIndex = _shuffleQueue[nextQueueIndex];
+      } else {
+        // 顺序播放
+        nextIndex = (_currentIndex + 1) % _playlist.length;
       }
-      final nextQueueIndex = (_shuffleQueueIndex + 1) % _shuffleQueue.length;
-      nextIndex = _shuffleQueue[nextQueueIndex];
-    } else {
-      // 顺序播放
-      nextIndex = (_currentIndex + 1) % _playlist.length;
-    }
-    
-    if (nextIndex < 0 || nextIndex >= _playlist.length) return;
-    
-    final nextSong = _playlist[nextIndex];
-    
-    // 如果下一首已经有URL或在缓存中，跳过
-    if (nextSong.audioUrl.isNotEmpty && nextSong.audioUrl.startsWith('http')) {
-      return;
-    }
-    
-    if (_urlCache.containsKey(nextSong.id)) {
-      final timestamp = _urlCacheTimestamp[nextSong.id];
-      if (timestamp != null) {
-        final age = DateTime.now().difference(timestamp).inMinutes;
-        if (age < _urlCacheExpiryMinutes) {
-          return; // 缓存仍然有效
+
+      if (nextIndex < 0 || nextIndex >= _playlist.length) return;
+
+      final nextSong = _playlist[nextIndex];
+
+      // 如果下一首已经有URL或在缓存中，跳过
+      if (nextSong.audioUrl.isNotEmpty && nextSong.audioUrl.startsWith('http')) {
+        return;
+      }
+
+      if (_urlCache.containsKey(nextSong.id)) {
+        final timestamp = _urlCacheTimestamp[nextSong.id];
+        if (timestamp != null) {
+          final age = DateTime.now().difference(timestamp).inMinutes;
+          if (age < _urlCacheExpiryMinutes) {
+            return; // 缓存仍然有效
+          }
         }
       }
-    }
 
-    // 后台获取下一首的URL
-    final url = await _getSongUrl(nextSong);
-    
-    if (url != null && url.isNotEmpty) {
-      // 更新播放列表中的歌曲
-      _playlist[nextIndex] = _createSongWithUrl(nextSong, url);
+      // 后台获取下一首的URL
+      final url = await _getSongUrl(nextSong);
+
+      if (url != null && url.isNotEmpty) {
+        // 更新播放列表中的歌曲
+        _playlist[nextIndex] = _createSongWithUrl(nextSong, url);
+        _log('✅ [预加载] 成功预加载: ${nextSong.title}');
+      }
+    } catch (e) {
+      // 🔧 优化:预加载失败不影响播放,只记录日志
+      _log('⚠️ [预加载] 预加载失败: $e');
     }
   }
 
@@ -358,17 +396,22 @@ class MusicProvider with ChangeNotifier {
   // 从本地加载设置
   void _loadSettings() async {
     _volume = _prefs.getVolume();
+
+    // 🔧 修复:同时设置 AudioPlayer (Windows) 和 AudioHandler (移动平台) 的音量
+    if (_audioPlayer != null) {
+      await _audioPlayer!.setVolume(_volume);
+    }
     if (_audioHandler != null) {
       await _audioHandler!.setVolume(_volume);
     }
-    
+
     final modeStr = _prefs.getPlayMode();
     _playMode = _parsePlayMode(modeStr);
     _applyPlayMode();
-    
+
     final qualityStr = _prefs.getAudioQuality();
     _audioQuality = _parseAudioQuality(qualityStr);
-    
+
     notifyListeners();
   }
 
@@ -416,13 +459,28 @@ class MusicProvider with ChangeNotifier {
   AudioQuality get audioQuality => _audioQuality;
   PlayMode get playMode => _playMode;
   double get volume => _volume;
-  
-  // 兼容旧代码
-  bool get isRepeat => _playMode == PlayMode.single;
-  bool get isShuffle => _playMode == PlayMode.shuffle;
+
+  /// 🔧 优化:设置播放列表和索引
+  /// 提取公共逻辑,减少代码重复
+  void _setupPlaylist(Song song, List<Song>? playlist) {
+    if (playlist != null && playlist.isNotEmpty) {
+      _playlist = playlist;
+      _currentIndex = playlist.indexWhere((s) => s.id == song.id);
+      if (_currentIndex < 0) _currentIndex = 0;
+
+      // 如果是随机播放模式，生成新的随机队列
+      if (_playMode == PlayMode.shuffle) {
+        _generateShuffleQueue();
+      }
+    } else {
+      _playlist = [song];
+      _currentIndex = 0;
+      _shuffleQueue.clear(); // 单曲播放，清空随机队列
+    }
+  }
 
   void playSong(Song song, {List<Song>? playlist, bool autoSkipOnError = false}) async {
-    if (!kIsWeb && Platform.isWindows) {
+    if (PlatformUtils.isWindows) {
       // Windows 平台使用 audioplayers
       await _playSongWithAudioPlayer(song, playlist: playlist, autoSkipOnError: autoSkipOnError);
     } else {
@@ -435,26 +493,13 @@ class MusicProvider with ChangeNotifier {
   Future<void> _playSongWithAudioPlayer(Song song, {List<Song>? playlist, bool autoSkipOnError = false}) async {
     _playRequestVersion++;
     final currentVersion = _playRequestVersion;
-    
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      // 保存播放列表（不获取URL）
-      if (playlist != null && playlist.isNotEmpty) {
-        _playlist = playlist;
-        _currentIndex = playlist.indexWhere((s) => s.id == song.id);
-        if (_currentIndex < 0) _currentIndex = 0;
-        
-        // 如果是随机播放模式，生成新的随机队列
-        if (_playMode == PlayMode.shuffle) {
-          _generateShuffleQueue();
-        }
-      } else {
-        _playlist = [song];
-        _currentIndex = 0;
-        _shuffleQueue.clear(); // 单曲播放，清空随机队列
-      }
+      // 🔧 优化:使用提取的公共方法设置播放列表
+      _setupPlaylist(song, playlist);
 
       // 获取当前歌曲的播放链接（使用缓存）
       final audioUrl = await _getSongUrl(song);
@@ -506,6 +551,7 @@ class MusicProvider with ChangeNotifier {
 
   /// 使用 audio_service 播放 (Android/iOS)
   Future<void> _playSongWithAudioService(Song song, {List<Song>? playlist, bool autoSkipOnError = false}) async {
+    // 🔧 优化:确保 AudioHandler 已初始化
     if (_audioHandler == null) {
       await _initAudioHandler();
       if (_audioHandler == null) {
@@ -513,39 +559,18 @@ class MusicProvider with ChangeNotifier {
         return;
       }
     }
-    
-    // 确保回调已设置
-    if (_audioHandler is MusicAudioHandler) {
-      final handler = _audioHandler as MusicAudioHandler;
-      if (handler.onPlaybackCompleted == null) {
-        handler.onPlaybackCompleted = () {
-          _handlePlayComplete();
-        };
-      }
-    }
-    
+
+    // 🔧 优化:回调已在 _initAudioHandler 中设置,无需重复设置
+
     _playRequestVersion++;
     final currentVersion = _playRequestVersion;
-    
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      // 保存播放列表
-      if (playlist != null && playlist.isNotEmpty) {
-        _playlist = playlist;
-        _currentIndex = playlist.indexWhere((s) => s.id == song.id);
-        if (_currentIndex < 0) _currentIndex = 0;
-        
-        // 如果是随机播放模式，生成新的随机队列
-        if (_playMode == PlayMode.shuffle) {
-          _generateShuffleQueue();
-        }
-      } else {
-        _playlist = [song];
-        _currentIndex = 0;
-        _shuffleQueue.clear(); // 单曲播放，清空随机队列
-      }
+      // 🔧 优化:使用提取的公共方法设置播放列表
+      _setupPlaylist(song, playlist);
 
       // 获取当前歌曲的播放链接（使用缓存）
       final audioUrl = await _getSongUrl(song);
@@ -557,25 +582,34 @@ class MusicProvider with ChangeNotifier {
       if (audioUrl == null || audioUrl.isEmpty) {
         print('❌ 获取播放链接失败');
         _consecutiveFailures++;
+
+        // 🔧 优化:自动跳过失败的歌曲
+        if (autoSkipOnError && _consecutiveFailures < AppConstants.maxConsecutiveFailures) {
+          print('⏭️ [MusicProvider] 自动跳过失败歌曲,尝试下一首');
+          Future.delayed(const Duration(milliseconds: 500), () => playNext(autoSkip: true));
+        }
         return;
       }
 
       // 更新当前歌曲
       _currentSong = _createSongWithUrl(song, audioUrl);
-      
+
       _playlist[_currentIndex] = _currentSong!;
       refreshFavorites();
 
-      // 使用 AudioHandler 播放（只传当前歌曲）
-      await _audioHandler!.setQueueFromSongs([_currentSong!], initialIndex: 0);
+      // 🔧 关键修复:始终同步完整播放列表到 AudioHandler
+      // setQueueFromSongs 会智能判断:
+      // - 如果队列内容相同,只使用 seek() 切换索引 (不会重置通知)
+      // - 如果队列内容不同,才重建队列
+      await _audioHandler!.setQueueFromSongs(_playlist, initialIndex: _currentIndex);
       await _audioHandler!.play();
-      
+
       _consecutiveFailures = 0;
       _historyService.addHistory(_currentSong!);
-      
+
       // 预加载下一首歌曲
       _preloadNextSong();
-    } catch (e, stackTrace) {
+    } catch (e) {
       print('❌ 播放出错: $e');
       _consecutiveFailures++;
     } finally {
@@ -587,7 +621,7 @@ class MusicProvider with ChangeNotifier {
   }
 
   void togglePlayPause() async {
-    if (!kIsWeb && Platform.isWindows) {
+    if (PlatformUtils.isWindows) {
       if (_audioPlayer == null) return;
       if (_isPlaying) {
         await _audioPlayer!.pause();
@@ -605,7 +639,7 @@ class MusicProvider with ChangeNotifier {
   }
 
   void pause() async {
-    if (!kIsWeb && Platform.isWindows) {
+    if (PlatformUtils.isWindows) {
       if (_audioPlayer == null) return;
       await _audioPlayer!.pause();
     } else {
@@ -615,7 +649,7 @@ class MusicProvider with ChangeNotifier {
   }
 
   void play() async {
-    if (!kIsWeb && Platform.isWindows) {
+    if (PlatformUtils.isWindows) {
       if (_audioPlayer == null) return;
       await _audioPlayer!.resume();
     } else {
@@ -625,19 +659,24 @@ class MusicProvider with ChangeNotifier {
   }
 
   void playNext({bool autoSkip = false}) async {
-    if (_playlist.isEmpty) return;
-    
+    if (_playlist.isEmpty) {
+      _log('⚠️ [MusicProvider] playNext: 播放列表为空');
+      return;
+    }
+
+    _log('⏭️ [MusicProvider] playNext: 当前索引=$_currentIndex, 列表长度=${_playlist.length}, 模式=$_playMode');
+
     // 计算下一首的索引
     if (_playMode == PlayMode.shuffle && _playlist.length > 1) {
       // 随机播放：使用伪随机队列
       if (_shuffleQueue.isEmpty || _shuffleQueue.length != _playlist.length) {
         _generateShuffleQueue();
       }
-      
+
       // 移动到队列中的下一首
       _shuffleQueueIndex = (_shuffleQueueIndex + 1) % _shuffleQueue.length;
       _currentIndex = _shuffleQueue[_shuffleQueueIndex];
-      
+
       // 如果播放完整个随机队列，重新生成
       if (_shuffleQueueIndex == 0) {
         _generateShuffleQueue();
@@ -646,34 +685,41 @@ class MusicProvider with ChangeNotifier {
       // 顺序播放
       _currentIndex = (_currentIndex + 1) % _playlist.length;
     }
-    
+
     _currentSong = _playlist[_currentIndex];
+    _log('✅ [MusicProvider] playNext: 下一首索引=$_currentIndex, 歌曲=${_currentSong!.title}');
     playSong(_currentSong!, playlist: _playlist, autoSkipOnError: autoSkip);
   }
 
   void playPrevious({bool autoSkip = false}) async {
-    if (_playlist.isEmpty) return;
-    
+    if (_playlist.isEmpty) {
+      _log('⚠️ [MusicProvider] playPrevious: 播放列表为空');
+      return;
+    }
+
+    _log('⏮️ [MusicProvider] playPrevious: 当前索引=$_currentIndex, 列表长度=${_playlist.length}, 模式=$_playMode');
+
     // 计算上一首的索引
     if (_playMode == PlayMode.shuffle && _playlist.length > 1) {
       // 随机播放：在随机队列中后退
       if (_shuffleQueue.isEmpty || _shuffleQueue.length != _playlist.length) {
         _generateShuffleQueue();
       }
-      
+
       _shuffleQueueIndex = (_shuffleQueueIndex - 1 + _shuffleQueue.length) % _shuffleQueue.length;
       _currentIndex = _shuffleQueue[_shuffleQueueIndex];
     } else {
       // 顺序播放
       _currentIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
     }
-    
+
     _currentSong = _playlist[_currentIndex];
+    _log('✅ [MusicProvider] playPrevious: 上一首索引=$_currentIndex, 歌曲=${_currentSong!.title}');
     playSong(_currentSong!, playlist: _playlist, autoSkipOnError: autoSkip);
   }
 
   void seekTo(Duration position) async {
-    if (!kIsWeb && Platform.isWindows) {
+    if (PlatformUtils.isWindows) {
       if (_audioPlayer == null) return;
       await _audioPlayer!.seek(position);
     } else {
@@ -681,6 +727,14 @@ class MusicProvider with ChangeNotifier {
       await _audioHandler!.seek(position);
     }
   }
+
+  /// 🔧 快捷键支持:跳转到指定位置
+  /// 别名方法,方便快捷键调用
+  void seek(Duration position) {
+    seekTo(position);
+  }
+
+
 
   void updatePosition(Duration position) {
     _currentPosition = position;
@@ -691,15 +745,15 @@ class MusicProvider with ChangeNotifier {
     _playMode = _playMode.next;
     await _prefs.setPlayMode(_playMode.toString().split('.').last);
     _applyPlayMode();
-    
+
     // 切换到随机播放时，生成随机队列
     if (_playMode == PlayMode.shuffle) {
       _generateShuffleQueue();
     }
-    
+
     notifyListeners();
   }
-  
+
   void setPlayMode(PlayMode mode) async {
     _playMode = mode;
     await _prefs.setPlayMode(_playMode.toString().split('.').last);
@@ -755,33 +809,6 @@ class MusicProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // 兼容旧代码
-  void toggleRepeat() async {
-    if (_playMode == PlayMode.single) {
-      _playMode = PlayMode.sequence;
-    } else {
-      _playMode = PlayMode.single;
-    }
-    await _prefs.setPlayMode(_playMode.toString().split('.').last);
-    _applyPlayMode();
-    notifyListeners();
-  }
-
-  void toggleShuffle() async {
-    if (_playMode == PlayMode.shuffle) {
-      _playMode = PlayMode.sequence;
-    } else {
-      _playMode = PlayMode.shuffle;
-      // 切换到随机播放时，生成随机队列
-      if (_playlist.isNotEmpty) {
-        _generateShuffleQueue();
-      }
-    }
-    await _prefs.setPlayMode(_playMode.toString().split('.').last);
-    _applyPlayMode();
-    notifyListeners();
-  }
-
   void setPlaylist(List<Song> songs) {
     _playlist = songs;
     notifyListeners();
@@ -791,9 +818,15 @@ class MusicProvider with ChangeNotifier {
 
   void setVolume(double volume) async {
     _volume = volume.clamp(0.0, 1.0);
+
+    // 🔧 修复:同时设置 AudioPlayer (Windows) 和 AudioHandler (移动平台) 的音量
+    if (_audioPlayer != null) {
+      await _audioPlayer!.setVolume(_volume);
+    }
     if (_audioHandler != null) {
       await _audioHandler!.setVolume(_volume);
     }
+
     await _prefs.setVolume(_volume);
     notifyListeners();
   }
@@ -943,10 +976,80 @@ class MusicProvider with ChangeNotifier {
   // 获取定时关闭服务
   SleepTimerService get sleepTimer => _sleepTimer;
 
+  /// 🔧 优化:内存使用监控
+  /// 用于调试和性能分析
+  void logMemoryUsage() {
+    print('📊 [内存监控] ==================');
+    print('📊 [内存] URL缓存: ${_urlCache.length}/$_maxUrlCacheSize');
+    print('📊 [内存] 播放列表: ${_playlist.length} 首歌曲');
+    print('📊 [内存] 收藏歌曲: ${_favoriteSongIds.length} 首');
+    print('📊 [内存] 随机队列: ${_shuffleQueue.length} 个索引');
+    print('📊 [内存] 正在处理的收藏操作: ${_favoriteOperationInProgress.length}');
+    print('📊 [内存监控] ==================');
+  }
+
+  /// 🔧 优化:清理过期的URL缓存
+  /// 手动清理过期缓存,释放内存
+  void clearExpiredUrlCache() {
+    final now = DateTime.now();
+    final expiredKeys = <String>[];
+
+    _urlCacheTimestamp.forEach((key, timestamp) {
+      if (now.difference(timestamp).inMinutes >= _urlCacheExpiryMinutes) {
+        expiredKeys.add(key);
+      }
+    });
+
+    for (final key in expiredKeys) {
+      _urlCache.remove(key);
+      _urlCacheTimestamp.remove(key);
+    }
+
+    if (expiredKeys.isNotEmpty) {
+      print('🗑️ [缓存清理] 已清理 ${expiredKeys.length} 个过期URL缓存');
+    }
+  }
+
+  /// 🔧 优化:清空所有URL缓存
+  void clearAllUrlCache() {
+    final count = _urlCache.length;
+    _urlCache.clear();
+    _urlCacheTimestamp.clear();
+    print('🗑️ [缓存清理] 已清空所有URL缓存 ($count 个)');
+  }
+
   @override
   void dispose() {
+    // 🔧 优化:正确释放所有资源,防止内存泄漏
+    // 参考: https://benamorn.medium.com/today-i-learned-memory-leak-in-flutter-c81951e2d9d8
+
+    _log('🗑️ [MusicProvider] 开始释放资源');
+
+    // 1. 取消所有 Stream 订阅,防止内存泄漏
+    final subscriptionCount = _subscriptions.length;
+    for (final subscription in _subscriptions) {
+      subscription.cancel();
+    }
+    _subscriptions.clear();
+    _log('✅ [MusicProvider] 已取消 $subscriptionCount 个 Stream 订阅');
+
+    // 2. 释放 AudioPlayer (Windows)
     _audioPlayer?.dispose();
+
+    // 3. 释放 AudioHandler (Android/iOS)
+    if (_audioHandler != null) {
+      // 注意: AudioHandler 由 AudioService 管理,不需要手动 dispose
+      // 但我们可以清理缓存
+      final cacheCount = _urlCache.length;
+      _urlCache.clear();
+      _urlCacheTimestamp.clear();
+      _log('✅ [MusicProvider] 已清理 $cacheCount 个 URL 缓存');
+    }
+
+    // 4. 释放定时器服务
     _sleepTimer.dispose();
+
+    _log('✅ [MusicProvider] 资源释放完成');
     super.dispose();
   }
 }

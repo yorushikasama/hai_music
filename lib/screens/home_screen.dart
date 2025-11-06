@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/theme_selector.dart';
+import '../widgets/draggable_window_area.dart';
 import '../utils/responsive.dart';
+import '../utils/platform_utils.dart';
 import '../theme/app_styles.dart';
+import '../services/keyboard_shortcut_service.dart';
 import 'discover_screen.dart';
 import 'search_screen.dart';
 import 'library_screen.dart';
@@ -21,12 +23,25 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  String? _searchQuery; // 用于传递给搜索页的关键词
+  Key _searchScreenKey = UniqueKey(); // 用于强制重建 SearchScreen
 
-  final List<Widget> _screens = [
+  // 动态生成页面列表，以便传递搜索关键词
+  List<Widget> get _screens => [
     const DiscoverScreen(),
-    const SearchScreen(),
+    SearchScreen(key: _searchScreenKey, initialQuery: _searchQuery),
     const LibraryScreen(),
   ];
+  
+  // 切换到搜索页并执行搜索
+  void _navigateToSearch(String query) {
+    print('🔍 导航到搜索页，关键词: $query');
+    setState(() {
+      _searchQuery = query;
+      _searchScreenKey = UniqueKey(); // 生成新的 key 强制重建
+      _selectedIndex = 1; // 切换到搜索页
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,18 +50,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final colors = themeProvider.colors;
     final hasCurrentSong = musicProvider.currentSong != null;
     final isDesktop = Responsive.isDesktop(context);
-    final isWeb = kIsWeb;
-    
-    return Scaffold(
+    final isWeb = PlatformUtils.isWeb;
+
+    // 🔧 添加快捷键支持 (仅桌面和 Web 平台)
+    final scaffold = Scaffold(
       backgroundColor: Colors.transparent,
       bottomNavigationBar: (isDesktop || isWeb)
           ? null
           : ClipRect(
               child: BackdropFilter(
                 filter: AppStyles.backdropBlur,
-                child: Container(
+                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+              child: Container(
                   decoration: BoxDecoration(
-                    color: colors.surface.withOpacity(0.75),
+                    color: colors.surface.withValues(alpha: 0.75),
                     boxShadow: AppStyles.getShadows(colors.isLight),
                     border: Border(
                       top: BorderSide(color: colors.border, width: 1),
@@ -90,13 +107,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ? LinearGradient(
                   begin: (colors.backgroundGradient as LinearGradient).begin,
                   end: (colors.backgroundGradient as LinearGradient).end,
+                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   colors: (colors.backgroundGradient as LinearGradient).colors
-                      .map((c) => c.withOpacity(0.95))
+                      .map((c) => c.withValues(alpha: 0.95))
                       .toList(),
                 )
               : colors.backgroundGradient,
-          color: colors.backgroundGradient == null 
-              ? colors.background.withOpacity(0.95) 
+          color: colors.backgroundGradient == null
+              ? colors.background.withValues(alpha: 0.95)
               : null,
         ),
         child: Column(
@@ -108,10 +126,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ClipRRect(
                     child: BackdropFilter(
                       filter: AppStyles.backdropBlur,
+                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       child: Container(
                         width: AppStyles.sidebarWidth,
                         decoration: BoxDecoration(
-                          color: colors.surface.withOpacity(0.75),
+                          color: colors.surface.withValues(alpha: 0.75),
                           border: Border(
                             right: BorderSide(
                               color: colors.border,
@@ -121,15 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                     child: Column(
                       children: [
-                        GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onPanStart: !kIsWeb ? (_) {
-                            try {
-                              appWindow.startDragging();
-                            } catch (e) {
-                              // 忽略错误
-                            }
-                          } : null,
+                        DraggableWindowArea(
                           child: _buildTitleBar(colors),
                         ),
                         SizedBox(height: AppStyles.spacingL),
@@ -179,11 +190,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   horizontal: AppStyles.spacingL,
                                   vertical: AppStyles.spacingM,
                                 ),
+                                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                                 decoration: BoxDecoration(
-                                  color: colors.accent.withOpacity(0.12),
+                                  color: colors.accent.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
                                   border: Border.all(
-                                    color: colors.accent.withOpacity(0.2),
+                                    color: colors.accent.withValues(alpha: 0.2),
                                     width: 1,
                                   ),
                                 ),
@@ -209,6 +221,59 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
+                        // 快捷键帮助按钮 (仅桌面平台显示)
+                        if (isDesktop || isWeb)
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              AppStyles.spacingXL,
+                              0,
+                              AppStyles.spacingXL,
+                              AppStyles.spacingXL,
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  KeyboardShortcutService.showShortcutHelp(context);
+                                },
+                                borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: AppStyles.spacingL,
+                                    vertical: AppStyles.spacingM,
+                                  ),
+                                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                                  decoration: BoxDecoration(
+                                    color: colors.surface.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
+                                    border: Border.all(
+                                      color: colors.border,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.keyboard,
+                                        size: 18,
+                                        color: colors.textSecondary,
+                                      ),
+                                      SizedBox(width: AppStyles.spacingS),
+                                      Text(
+                                        '快捷键',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: colors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                       ),
@@ -217,22 +282,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Column(
                     children: [
-                      if (isDesktop && !kIsWeb)
-                        GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onPanStart: (_) {
-                            try {
-                              appWindow.startDragging();
-                            } catch (e) {
-                              // 忽略错误
-                            }
-                          },
+                      if (isDesktop && !isWeb)
+                        DraggableWindowArea(
                           child: _buildTopDragArea(),
                         ),
                       Expanded(
                         child: _screens[_selectedIndex],
                       ),
-                      if (hasCurrentSong) const MiniPlayer(),
+                      if (hasCurrentSong) MiniPlayer(
+                        onArtistTap: _navigateToSearch,
+                      ),
                     ],
                   ),
                 ),
@@ -243,6 +302,30 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       ),
     );
+
+    // 只在桌面和 Web 平台启用快捷键
+    if (isDesktop || isWeb) {
+      return Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          return KeyboardShortcutService.handleKeyEvent(
+            event,
+            musicProvider,
+            context,
+            onSearchRequested: () {
+              // Ctrl+F: 切换到搜索页面
+              setState(() {
+                _selectedIndex = 1; // 搜索页面的索引
+              });
+            },
+          );
+        },
+        child: scaffold,
+      );
+    }
+
+    // 移动端不启用快捷键
+    return scaffold;
   }
 
   Widget _buildSidebarItem({
@@ -263,9 +346,10 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingM),
+            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             decoration: BoxDecoration(
               color: isSelected
-                  ? colors.accent.withOpacity(0.12)
+                  ? colors.accent.withValues(alpha: 0.12)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
             ),
@@ -305,9 +389,10 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          boxShadow: [
+          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+        boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.3),
+              color: color.withValues(alpha: 0.3),
               blurRadius: 4,
               offset: const Offset(0, 1),
             ),
@@ -329,7 +414,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildMacOSButton(
                 color: const Color(0xFFFF5F57),
                 onPressed: () {
-                  if (!kIsWeb) {
+                  if (PlatformUtils.isDesktop) {
                     try {
                       appWindow.close();
                     } catch (e) {
@@ -342,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildMacOSButton(
                 color: const Color(0xFFFEBC2E),
                 onPressed: () {
-                  if (!kIsWeb) {
+                  if (PlatformUtils.isDesktop) {
                     try {
                       appWindow.minimize();
                     } catch (e) {
@@ -355,7 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildMacOSButton(
                 color: const Color(0xFF28C840),
                 onPressed: () {
-                  if (!kIsWeb) {
+                  if (PlatformUtils.isDesktop) {
                     try {
                       appWindow.maximizeOrRestore();
                     } catch (e) {

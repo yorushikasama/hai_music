@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/favorite_song.dart';
-import '../models/song.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
@@ -87,9 +86,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             physics: AlwaysScrollableScrollPhysics(), // 强制启用滚动
             slivers: [
               // 顶部导航栏
-              SliverAppBar(
+              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+            SliverAppBar(
                 pinned: true,
-                backgroundColor: colors.surface.withOpacity(0.95),
+                backgroundColor: colors.surface.withValues(alpha: 0.95),
                 elevation: 0,
                 leading: IconButton(
                   icon: Icon(Icons.arrow_back_ios_new, color: colors.textPrimary, size: 20),
@@ -192,10 +192,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           Icon(
             isSearchEmpty ? Icons.search_off : Icons.favorite_border,
             size: 80,
-            color: colors.textSecondary.withOpacity(0.5),
+            color: colors.textSecondary.withValues(alpha: 0.5),
           ),
           SizedBox(height: AppStyles.spacingL),
           Text(
@@ -251,20 +252,21 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     MusicProvider musicProvider,
   ) {
     return Container(
-      decoration: BoxDecoration(
-        color: isPlaying 
-            ? colors.accent.withOpacity(0.08)
-            : colors.surface.withOpacity(0.6),
+      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+    decoration: BoxDecoration(
+        color: isPlaying
+            ? colors.accent.withValues(alpha: 0.08)
+            : colors.surface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isPlaying 
-              ? colors.accent.withOpacity(0.3)
-              : colors.border.withOpacity(0.1),
+          color: isPlaying
+              ? colors.accent.withValues(alpha: 0.3)
+              : colors.border.withValues(alpha: 0.1),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: Offset(0, 2),
           ),
@@ -295,25 +297,27 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
+                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                         placeholder: (context, url) => Container(
                           width: 60,
                           height: 60,
-                          color: colors.card.withOpacity(0.3),
-                          child: Icon(Icons.music_note, color: colors.textSecondary.withOpacity(0.3)),
+                          color: colors.card.withValues(alpha: 0.3),
+                          child: Icon(Icons.music_note, color: colors.textSecondary.withValues(alpha: 0.3)),
                         ),
                         errorWidget: (context, url, error) => Container(
                           width: 60,
                           height: 60,
-                          color: colors.card.withOpacity(0.3),
+                          color: colors.card.withValues(alpha: 0.3),
                           child: Icon(Icons.music_note, color: colors.textSecondary),
                         ),
                       ),
                     ),
                     if (isPlaying)
                       Positioned.fill(
-                        child: Container(
+                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                      child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
+                            color: Colors.black.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
@@ -345,9 +349,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       SizedBox(height: 4),
                       Text(
                         favorite.artist,
-                        style: TextStyle(
+                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                      style: TextStyle(
                           fontSize: 13,
-                          color: colors.textSecondary.withOpacity(0.8),
+                          color: colors.textSecondary.withValues(alpha: 0.8),
                           height: 1.2,
                         ),
                         maxLines: 1,
@@ -360,18 +365,20 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 // 时长
                 Text(
                   _formatDuration(favorite.duration),
-                  style: TextStyle(
+                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                style: TextStyle(
                     fontSize: 13,
-                    color: colors.textSecondary.withOpacity(0.6),
+                    color: colors.textSecondary.withValues(alpha: 0.6),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 SizedBox(width: 8),
                 // 收藏按钮
                 Container(
-                  decoration: BoxDecoration(
+                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.red.withOpacity(0.1),
+                    color: Colors.red.withValues(alpha: 0.1),
                   ),
                   child: IconButton(
                     icon: musicProvider.isFavoriteOperationInProgress(favorite.id)

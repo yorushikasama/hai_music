@@ -211,12 +211,11 @@ class R2StorageService {
       );
 
       await for (final obj in objectsStream) {
+        // 🔧 优化:移除不必要的 null 检查和 ! 操作符
         // minio 3.5.8 使用 objects 属性
-        if (obj.objects != null) {
-          for (final item in obj.objects!) {
-            if (item.key != null) {
-              await _client!.removeObject(_bucketName!, item.key!);
-            }
+        for (final item in obj.objects) {
+          if (item.key != null) {
+            await _client!.removeObject(_bucketName!, item.key!);
           }
         }
       }

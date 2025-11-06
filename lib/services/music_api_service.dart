@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/song.dart';
 import '../config/app_constants.dart';
 import 'dio_client.dart';
+import 'preferences_cache_service.dart';
 
 /// 音乐API服务类
 /// 支持多个音乐平台的搜索和播放功能
@@ -12,6 +12,7 @@ class MusicApiService {
   // API基础URL - 可以根据需要切换不同的API服务
   static const String _baseUrl = 'https://api.injahow.cn';
   final _dioClient = DioClient();
+  final _prefsCache = PreferencesCacheService();
   
   /// 搜索歌曲（使用点歌API - 返回列表）
   /// 
@@ -101,45 +102,46 @@ class MusicApiService {
       } else {
         return null;
       }
-      
+
+      // 🔧 优化:使用 PreferencesCacheService 单例
       // 检查缓存
-      final prefs = await SharedPreferences.getInstance();
-      final cachedLyric = prefs.getString(cacheKey);
-      final cachedTimestamp = prefs.getInt(timestampKey) ?? 0;
+      await _prefsCache.init();
+      final cachedLyric = await _prefsCache.getString(cacheKey);
+      final cachedTimestamp = await _prefsCache.getInt(timestampKey) ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
-      
+
       // 检查缓存是否过期(7天)
       final cacheExpired = (now - cachedTimestamp) > 7 * 24 * 60 * 60 * 1000;
-      
+
       if (cachedLyric != null && cachedLyric.isNotEmpty && !cacheExpired) {
         return cachedLyric;
       }
-      
+
       // 缓存未命中,从API获取
       Map<String, dynamic> queryParams = {};
-      
+
       if (songId != null && songId.isNotEmpty) {
         queryParams['id'] = songId;
       } else if (songMid != null && songMid.isNotEmpty) {
         queryParams['mid'] = songMid;
       }
-      
+
       final response = await _dioClient.get(
         'https://api.vkeys.cn/v2/music/tencent/lyric',
         queryParameters: queryParams,
       );
-      
+
       if (response.statusCode == 200) {
         final data = response.data;
-        
+
         if (data['code'] == 200 && data['data'] != null) {
           final lyricData = data['data'];
           // 返回原始歌词（字段名是 lrc 不是 lyric）
           if (lyricData['lrc'] != null && lyricData['lrc'].isNotEmpty) {
             final lyric = lyricData['lrc'] as String;
             // 保存到缓存(7天过期)
-            await prefs.setString(cacheKey, lyric);
-            await prefs.setInt(timestampKey, now);
+            await _prefsCache.setString(cacheKey, lyric);
+            await _prefsCache.setInt(timestampKey, now);
             return lyric;
           }
         }
