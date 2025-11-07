@@ -348,7 +348,14 @@ class FavoriteManagerService {
       if (isSyncEnabled) {
         // 从云端获取
         print('☁️ 从云端获取收藏列表...');
-        return await _supabase.getFavorites();
+        final favorites = await _supabase.getFavorites();
+        
+        // 🔧 修复：同步更新 SharedPreferences 中的 ID 列表，确保 MusicProvider 的收藏状态正确
+        final favoriteIds = favorites.map((f) => f.id).toList();
+        await _prefs.setFavoriteSongs(favoriteIds);
+        print('✅ 已同步 ${favoriteIds.length} 个收藏ID到本地存储');
+        
+        return favorites;
       } else {
         // 从本地获取（只有ID列表）
         print('📱 从本地获取收藏ID列表...');

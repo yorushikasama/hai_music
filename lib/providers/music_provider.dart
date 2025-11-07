@@ -216,6 +216,8 @@ class MusicProvider with ChangeNotifier {
 
   /// 处理播放完成
   void _handlePlayComplete() async {
+    _log('🎬 [MusicProvider] 播放完成: ${_currentSong?.title}, 当前位置: $_currentPosition, 总时长: $_totalDuration');
+    
     _isPlaying = false;
     notifyListeners();
     
@@ -223,6 +225,7 @@ class MusicProvider with ChangeNotifier {
       case PlayMode.single:
         // 单曲循环：seek到开头继续播放
         if (_currentSong != null) {
+          _log('🔁 [MusicProvider] 单曲循环，重新播放');
           if (PlatformUtils.isWindows) {
             await _audioPlayer?.seek(Duration.zero);
             await _audioPlayer?.resume();
@@ -234,6 +237,7 @@ class MusicProvider with ChangeNotifier {
         break;
       case PlayMode.sequence:
       case PlayMode.shuffle:
+        _log('⏭️ [MusicProvider] 自动播放下一首');
         playNext(autoSkip: true);
         break;
     }
@@ -317,6 +321,9 @@ class MusicProvider with ChangeNotifier {
     if (_playlist.isEmpty) return;
 
     try {
+      // 🔧 修复：记录当前播放请求版本，防止预加载过时数据
+      final preloadVersion = _playRequestVersion;
+      
       // 计算下一首的索引（考虑播放模式）
       int nextIndex;
       if (_playMode == PlayMode.shuffle && _playlist.length > 1) {
@@ -353,10 +360,18 @@ class MusicProvider with ChangeNotifier {
       // 后台获取下一首的URL
       final url = await _getSongUrl(nextSong);
 
+      // 🔧 修复：检查版本号，如果用户已经切歌，放弃更新
+      if (preloadVersion != _playRequestVersion) {
+        _log('⚠️ [预加载] 播放列表已变化，放弃预加载结果');
+        return;
+      }
+
       if (url != null && url.isNotEmpty) {
-        // 更新播放列表中的歌曲
-        _playlist[nextIndex] = _createSongWithUrl(nextSong, url);
-        _log('✅ [预加载] 成功预加载: ${nextSong.title}');
+        // 再次检查索引是否仍然有效（播放列表可能已改变）
+        if (nextIndex < _playlist.length && _playlist[nextIndex].id == nextSong.id) {
+          _playlist[nextIndex] = _createSongWithUrl(nextSong, url);
+          _log('✅ [预加载] 成功预加载: ${nextSong.title}');
+        }
       }
     } catch (e) {
       // 🔧 优化:预加载失败不影响播放,只记录日志
@@ -509,10 +524,17 @@ class MusicProvider with ChangeNotifier {
       }
 
       if (audioUrl == null || audioUrl.isEmpty) {
-        print('❌ 获取播放链接失败');
+        print('❌ 获取播放链接失败: ${song.title}');
         _consecutiveFailures++;
+        
+        // 🔧 修复：只在自动播放时才自动跳过，用户主动点击时不跳过
         if (autoSkipOnError && _consecutiveFailures < AppConstants.maxConsecutiveFailures) {
+          print('⏭️ [MusicProvider] 自动跳过失败歌曲,尝试下一首 (自动播放模式)');
           Future.delayed(const Duration(milliseconds: 500), () => playNext(autoSkip: true));
+        } else {
+          print('⚠️ [MusicProvider] 播放失败，停止播放（用户主动点击）');
+          _isLoading = false;
+          notifyListeners();
         }
         return;
       }
@@ -522,10 +544,26 @@ class MusicProvider with ChangeNotifier {
       
       // 更新播放列表中的当前歌曲
       _playlist[_currentIndex] = _currentSong!;
+      
+      // 刷新收藏状态并立即通知监听器
       refreshFavorites();
+      notifyListeners();
+
+      // 🔧 修复：在停止播放之前检查版本号，避免影响新的播放请求
+      if (currentVersion != _playRequestVersion) {
+        print('⚠️ [MusicProvider] 播放请求已过期（停止前），取消操作');
+        return;
+      }
 
       // Windows: 使用 audioplayers 播放
       await _audioPlayer!.stop();
+      
+      // 🔧 修复：在调用 play() 之前再次检查版本号，防止快速切歌时播放旧歌曲
+      if (currentVersion != _playRequestVersion) {
+        print('⚠️ [MusicProvider] 播放请求已过期（播放前），取消播放');
+        return;
+      }
+      
       await _audioPlayer!.play(UrlSource(_currentSong!.audioUrl));
       
       _consecutiveFailures = 0;
@@ -551,16 +589,14 @@ class MusicProvider with ChangeNotifier {
 
   /// 使用 audio_service 播放 (Android/iOS)
   Future<void> _playSongWithAudioService(Song song, {List<Song>? playlist, bool autoSkipOnError = false}) async {
-    // 🔧 优化:确保 AudioHandler 已初始化
+    // 确保 AudioHandler 已初始化
     if (_audioHandler == null) {
       await _initAudioHandler();
       if (_audioHandler == null) {
-        print('❌ AudioHandler 初始化失败');
+        _log('❌ AudioHandler 初始化失败');
         return;
       }
     }
-
-    // 🔧 优化:回调已在 _initAudioHandler 中设置,无需重复设置
 
     _playRequestVersion++;
     final currentVersion = _playRequestVersion;
@@ -569,48 +605,53 @@ class MusicProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // 🔧 优化:使用提取的公共方法设置播放列表
+      // 设置播放列表
       _setupPlaylist(song, playlist);
 
-      // 获取当前歌曲的播放链接（使用缓存）
+      // 获取播放链接
       final audioUrl = await _getSongUrl(song);
 
       if (currentVersion != _playRequestVersion) {
+        _log('⚠️ 播放请求已过期');
         return;
       }
       
       if (audioUrl == null || audioUrl.isEmpty) {
-        print('❌ 获取播放链接失败');
+        _log('❌ 获取播放链接失败: ${song.title}');
         _consecutiveFailures++;
 
-        // 🔧 优化:自动跳过失败的歌曲
         if (autoSkipOnError && _consecutiveFailures < AppConstants.maxConsecutiveFailures) {
-          print('⏭️ [MusicProvider] 自动跳过失败歌曲,尝试下一首');
+          _log('⏭️ 自动跳过失败歌曲');
           Future.delayed(const Duration(milliseconds: 500), () => playNext(autoSkip: true));
+        } else {
+          _isLoading = false;
+          notifyListeners();
         }
         return;
       }
 
       // 更新当前歌曲
       _currentSong = _createSongWithUrl(song, audioUrl);
-
       _playlist[_currentIndex] = _currentSong!;
+      
       refreshFavorites();
+      notifyListeners();
 
-      // 🔧 关键修复:始终同步完整播放列表到 AudioHandler
-      // setQueueFromSongs 会智能判断:
-      // - 如果队列内容相同,只使用 seek() 切换索引 (不会重置通知)
-      // - 如果队列内容不同,才重建队列
-      await _audioHandler!.setQueueFromSongs(_playlist, initialIndex: _currentIndex);
-      await _audioHandler!.play();
+      if (currentVersion != _playRequestVersion) {
+        _log('⚠️ 播放请求已过期（播放前）');
+        return;
+      }
+
+      // 🔧 新架构：直接播放单首歌曲
+      await _audioHandler!.playSingleSong(_currentSong!, displayQueue: _playlist);
 
       _consecutiveFailures = 0;
       _historyService.addHistory(_currentSong!);
 
-      // 预加载下一首歌曲
+      // 预加载下一首
       _preloadNextSong();
     } catch (e) {
-      print('❌ 播放出错: $e');
+      _log('❌ 播放出错: $e');
       _consecutiveFailures++;
     } finally {
       if (currentVersion == _playRequestVersion) {
@@ -664,9 +705,16 @@ class MusicProvider with ChangeNotifier {
       return;
     }
 
+    // 🔧 防抖：如果正在加载，忽略快速点击
+    if (_isLoading && !autoSkip) {
+      _log('⚠️ [MusicProvider] 正在加载，忽略快速点击');
+      return;
+    }
+
     _log('⏭️ [MusicProvider] playNext: 当前索引=$_currentIndex, 列表长度=${_playlist.length}, 模式=$_playMode');
 
     // 计算下一首的索引
+    int nextIndex;
     if (_playMode == PlayMode.shuffle && _playlist.length > 1) {
       // 随机播放：使用伪随机队列
       if (_shuffleQueue.isEmpty || _shuffleQueue.length != _playlist.length) {
@@ -675,7 +723,7 @@ class MusicProvider with ChangeNotifier {
 
       // 移动到队列中的下一首
       _shuffleQueueIndex = (_shuffleQueueIndex + 1) % _shuffleQueue.length;
-      _currentIndex = _shuffleQueue[_shuffleQueueIndex];
+      nextIndex = _shuffleQueue[_shuffleQueueIndex];
 
       // 如果播放完整个随机队列，重新生成
       if (_shuffleQueueIndex == 0) {
@@ -683,12 +731,13 @@ class MusicProvider with ChangeNotifier {
       }
     } else {
       // 顺序播放
-      _currentIndex = (_currentIndex + 1) % _playlist.length;
+      nextIndex = (_currentIndex + 1) % _playlist.length;
     }
 
-    _currentSong = _playlist[_currentIndex];
-    _log('✅ [MusicProvider] playNext: 下一首索引=$_currentIndex, 歌曲=${_currentSong!.title}');
-    playSong(_currentSong!, playlist: _playlist, autoSkipOnError: autoSkip);
+    _log('✅ [MusicProvider] playNext: 下一首索引=$nextIndex, 歌曲=${_playlist[nextIndex].title}');
+    
+    // 🔧 优化：直接切歌，不重建队列
+    await _switchToSong(nextIndex, autoSkipOnError: autoSkip);
   }
 
   void playPrevious({bool autoSkip = false}) async {
@@ -697,9 +746,16 @@ class MusicProvider with ChangeNotifier {
       return;
     }
 
+    // 🔧 防抖：如果正在加载，忽略快速点击
+    if (_isLoading && !autoSkip) {
+      _log('⚠️ [MusicProvider] 正在加载，忽略快速点击');
+      return;
+    }
+
     _log('⏮️ [MusicProvider] playPrevious: 当前索引=$_currentIndex, 列表长度=${_playlist.length}, 模式=$_playMode');
 
     // 计算上一首的索引
+    int prevIndex;
     if (_playMode == PlayMode.shuffle && _playlist.length > 1) {
       // 随机播放：在随机队列中后退
       if (_shuffleQueue.isEmpty || _shuffleQueue.length != _playlist.length) {
@@ -707,15 +763,98 @@ class MusicProvider with ChangeNotifier {
       }
 
       _shuffleQueueIndex = (_shuffleQueueIndex - 1 + _shuffleQueue.length) % _shuffleQueue.length;
-      _currentIndex = _shuffleQueue[_shuffleQueueIndex];
+      prevIndex = _shuffleQueue[_shuffleQueueIndex];
     } else {
       // 顺序播放
-      _currentIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
+      prevIndex = (_currentIndex - 1 + _playlist.length) % _playlist.length;
     }
 
-    _currentSong = _playlist[_currentIndex];
-    _log('✅ [MusicProvider] playPrevious: 上一首索引=$_currentIndex, 歌曲=${_currentSong!.title}');
-    playSong(_currentSong!, playlist: _playlist, autoSkipOnError: autoSkip);
+    _log('✅ [MusicProvider] playPrevious: 上一首索引=$prevIndex, 歌曲=${_playlist[prevIndex].title}');
+    
+    // 🔧 优化：直接切歌，不重建队列
+    await _switchToSong(prevIndex, autoSkipOnError: autoSkip);
+  }
+
+  /// 🔧 优化：快速切歌
+  Future<void> _switchToSong(int targetIndex, {bool autoSkipOnError = false}) async {
+    if (targetIndex < 0 || targetIndex >= _playlist.length) {
+      _log('❌ 索引越界: $targetIndex');
+      return;
+    }
+
+    _playRequestVersion++;
+    final currentVersion = _playRequestVersion;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final targetSong = _playlist[targetIndex];
+      _log('🔄 切歌: ${targetSong.title}');
+      
+      // 获取播放链接
+      final audioUrl = await _getSongUrl(targetSong);
+
+      if (currentVersion != _playRequestVersion) {
+        _log('⚠️ 请求已过期');
+        return;
+      }
+
+      if (audioUrl == null || audioUrl.isEmpty) {
+        _log('❌ 获取URL失败: ${targetSong.title}');
+        _consecutiveFailures++;
+
+        if (autoSkipOnError && _consecutiveFailures < AppConstants.maxConsecutiveFailures) {
+          _log('⏭️ 自动跳过失败歌曲');
+          Future.delayed(const Duration(milliseconds: 500), () => playNext(autoSkip: true));
+        } else {
+          _isLoading = false;
+          notifyListeners();
+        }
+        return;
+      }
+
+      // 更新当前歌曲
+      _currentIndex = targetIndex;
+      _currentSong = _createSongWithUrl(targetSong, audioUrl);
+      _playlist[_currentIndex] = _currentSong!;
+
+      refreshFavorites();
+      notifyListeners();
+
+      if (currentVersion != _playRequestVersion) {
+        _log('⚠️ 播放前请求已过期');
+        return;
+      }
+
+      // 🔧 新架构：直接播放
+      if (PlatformUtils.isWindows) {
+        await _audioPlayer!.stop();
+        if (currentVersion != _playRequestVersion) return;
+        await _audioPlayer!.play(UrlSource(_currentSong!.audioUrl));
+      } else {
+        await _audioHandler!.playSingleSong(_currentSong!, displayQueue: _playlist);
+      }
+
+      _consecutiveFailures = 0;
+      _historyService.addHistory(_currentSong!);
+
+      // 预加载下一首
+      _preloadNextSong();
+    } catch (e) {
+      _log('❌ 切歌失败: $e');
+      _consecutiveFailures++;
+
+      if (autoSkipOnError && currentVersion == _playRequestVersion &&
+          _consecutiveFailures < AppConstants.maxConsecutiveFailures) {
+        Future.delayed(const Duration(milliseconds: 500), () => playNext(autoSkip: true));
+      }
+    } finally {
+      if (currentVersion == _playRequestVersion) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
   }
 
   void seekTo(Duration position) async {

@@ -64,6 +64,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     
     print('📥 加载完成，共 ${favorites.length} 首歌曲');
     
+    // 🔧 修复：刷新 MusicProvider 的收藏状态，确保 mini 播放器显示正确
+    musicProvider.refreshFavorites();
+    
     if (mounted) {
       setState(() {
         _favorites = favorites;
@@ -279,7 +282,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           onTap: () {
             // 使用扩展方法转换
             final song = favorite.toSong();
-            final allSongs = _favorites.toSongList();
+            // 🔧 修复：使用 _filteredFavorites 而不是 _favorites，确保索引匹配
+            final allSongs = _filteredFavorites.toSongList();
             
             musicProvider.playSong(song, playlist: allSongs);
           },
