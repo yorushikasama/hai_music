@@ -6,6 +6,7 @@ import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
 import '../services/clipboard_config_parser.dart';
+import '../widgets/draggable_window_area.dart';
 
 /// 存储配置界面
 class StorageConfigScreen extends StatefulWidget {
@@ -218,22 +219,25 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: colors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          '云端同步配置',
-          style: TextStyle(
-            color: colors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        actions: [
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: DraggableWindowArea(
+          child: AppBar(
+            backgroundColor: colors.surface,
+            elevation: 0,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: colors.textPrimary),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Text(
+              '云端同步配置',
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            actions: [
           if (_isLoading)
             const Center(
               child: Padding(
@@ -263,7 +267,9 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
               ),
             ),
           ],
-        ],
+            ],
+          ),
+        ),
       ),
       body: Form(
         key: _formKey,
