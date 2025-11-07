@@ -4,11 +4,18 @@
 
 ## ✨ 应用截图
 
-<p align="center">
-  <img src="pic/29ae7de02b29c735b75384b469d8c213.png" width="30%" alt="我喜欢页面" />
-  <img src="pic/6d840a56c3b1e2059ec1983259f7762b.png" width="30%" alt="播放页面" />
-  <img src="pic/8524a6646bc2e10ffe5745938f69472b_720.jpg" width="30%" alt="音乐库页面" />
-</p>
+<div align="center">
+
+<p><strong>云端同步配置页面</strong></p>
+<img src="pic/29ae7de02b29c735b75384b469d8c213.png" width="70%" alt="云端同步配置页面" />
+
+<p><strong>windows端主页面</strong></p>
+<img src="pic/6d840a56c3b1e2059ec1983259f7762b.png" width="70%" alt="windows端主页面" />
+
+<p><strong>手机端主页</strong></p>
+<img src="pic/8524a6646bc2e10ffe5745938f69472b_720.jpg" width="40%" alt="手机端主页" />
+
+</div>
 
 ## 🎯 核心功能
 
