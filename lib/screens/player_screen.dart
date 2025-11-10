@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -7,9 +9,13 @@ import 'package:flutter_lyric/lyrics_reader.dart';
 import '../providers/music_provider.dart';
 import '../services/music_api_service.dart';
 import '../services/lyrics_service.dart';
+import '../services/download_service.dart';
+import '../services/download_manager.dart';
+import '../models/song.dart';
 import '../models/play_mode.dart';
 import '../widgets/audio_quality_selector.dart';
 import '../widgets/draggable_window_area.dart';
+import '../screens/download_progress_screen.dart';
 import '../utils/platform_utils.dart';
 
 
@@ -22,6 +28,7 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderStateMixin {
   final _apiService = MusicApiService();
+  final _downloadService = DownloadService();
   late AnimationController _rotationController;
   String? _currentSongId; // 追踪当前歌曲 ID
 
@@ -48,7 +55,10 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
       duration: const Duration(seconds: 20),
       vsync: this,
     )..repeat();
-    _loadLyrics();
+    // 延迟加载歌词，确保 MusicProvider 已经更新
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLyrics();
+    });
   }
 
   @override
@@ -62,6 +72,11 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     final song = musicProvider.currentSong;
     if (song == null) return;
 
+    // 如果歌曲没有变化，不重复加载
+    if (song.id == _currentSongId) {
+      return;
+    }
+
     // 更新当前歌曲 ID
     _currentSongId = song.id;
 
@@ -70,16 +85,34 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
       // 1) 优先使用 Song 对象中的歌词（如从“我喜欢”映射而来）
       if (song.lyricsLrc != null && song.lyricsLrc!.isNotEmpty) {
         lyrics = song.lyricsLrc;
-        print('✅ 使用对象存储的歌词: ${song.title}');
+        Logger.debug('✅ 使用对象存储的歌词: ${song.title}');
       }
-      // 2) 其次从数据库读取歌词
-      lyrics ??= await LyricsService().getLyrics(song.id);
-      if (lyrics != null && lyrics.isNotEmpty) {
-        print('✅ 从数据库读取歌词: ${song.title}');
-      }
-      // 3) 最后回退到 API，并把结果写回数据库
+      // 2) 检查是否有本地下载的歌词文件
       if (lyrics == null || lyrics.isEmpty) {
-        print('⚠️ 无本地歌词，使用API获取: ${song.title}');
+        final downloaded = await _downloadService.getDownloadedSongs();
+        final downloadedSong = downloaded.where((d) => d.id == song.id).firstOrNull;
+        if (downloadedSong?.localLyricsPath != null) {
+          try {
+            final lyricsFile = File(downloadedSong!.localLyricsPath!);
+            if (await lyricsFile.exists()) {
+              lyrics = await lyricsFile.readAsString();
+              Logger.debug('✅ 使用本地下载的歌词: ${song.title}');
+            }
+          } catch (e) {
+            Logger.warning('读取本地歌词失败: $e', 'PlayerScreen');
+          }
+        }
+      }
+      // 3) 其次从数据库读取歌词
+      if (lyrics == null || lyrics.isEmpty) {
+        lyrics = await LyricsService().getLyrics(song.id);
+        if (lyrics != null && lyrics.isNotEmpty) {
+          Logger.debug('✅ 从数据库读取歌词: ${song.title}');
+        }
+      }
+      // 4) 最后回退到 API，并把结果写回数据库
+      if (lyrics == null || lyrics.isEmpty) {
+        Logger.debug('⚠️ 无本地歌词，使用API获取: ${song.title}');
         lyrics = await _apiService.getLyrics(songId: song.id);
         if (lyrics != null && lyrics.isNotEmpty) {
           // 🔧 优化:移除不必要的 ! 操作符
@@ -385,6 +418,54 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   onTap: () {
                     Navigator.pop(context);
                     _showPlaylistDialog(context, musicProvider);
+                  },
+                ),
+                // 下载歌曲
+                ListTile(
+                  leading: const Icon(Icons.download_outlined, color: Colors.white),
+                  title: const Text(
+                    '下载到本地',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final song = musicProvider.currentSong;
+                    if (song != null) {
+                      final manager = DownloadManager();
+                      await manager.init();
+                      final success = await manager.addDownload(song);
+                      
+                      if (!mounted) return;
+                      
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('已添加到下载队列：${song.title}'),
+                            duration: const Duration(seconds: 2),
+                            behavior: SnackBarBehavior.floating,
+                            action: SnackBarAction(
+                              label: '查看',
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const DownloadProgressScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('《${song.title}》已在下载列表中'),
+                            duration: const Duration(seconds: 2),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
                   },
                 ),
                 const SizedBox(height: 20),
@@ -990,6 +1071,11 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                         },
                       ),
               const SizedBox(width: 16),
+              // 下载按钮（仅 Windows 显示）
+              if (Platform.isWindows && song != null)
+                _buildDownloadButton(song, musicProvider),
+              if (Platform.isWindows && song != null)
+                const SizedBox(width: 16),
               // 音量控制
               _buildVolumeControl(musicProvider),
               const SizedBox(width: 16),
@@ -1246,4 +1332,90 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
       ),
     );
   }
+
+  // 构建下载按钮
+  Widget _buildDownloadButton(Song song, MusicProvider musicProvider) {
+    return FutureBuilder<bool>(
+      future: _downloadService.isDownloaded(song.id),
+      builder: (context, snapshot) {
+        final isDownloaded = snapshot.data ?? false;
+        
+        return _buildSimpleButton(
+          icon: isDownloaded ? Icons.download_done : Icons.download_outlined,
+          size: 24,
+          color: isDownloaded ? Colors.green : null,
+          opacity: isDownloaded ? 0.5 : 1.0,
+          onPressed: () async {
+            // 如果已下载，则不执行任何操作
+            if (isDownloaded) return;
+            
+            final manager = DownloadManager();
+            await manager.init();
+            final success = await manager.addDownload(song);
+            
+            if (!mounted) return;
+            
+            if (success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.download, color: Colors.white, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '已添加到下载队列：${song.title}',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: Colors.blue.shade700,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  margin: const EdgeInsets.all(16),
+                  action: SnackBarAction(
+                    label: '查看',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DownloadProgressScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.white, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '《${song.title}》已在下载列表中',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: Colors.orange.shade700,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  margin: const EdgeInsets.all(16),
+                ),
+              );
+            }
+          },
+        );
+      },
+    );
+  }
+
 }

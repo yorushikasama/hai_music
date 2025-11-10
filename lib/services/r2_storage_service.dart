@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:minio/minio.dart';
 import 'package:path/path.dart' as path;
 import '../models/storage_config.dart';
+import '../utils/logger.dart';
 
 /// Cloudflare R2 存储服务（兼容 S3 API）
 class R2StorageService {
@@ -19,7 +20,7 @@ class R2StorageService {
   /// 初始化 R2 客户端
   Future<bool> initialize(StorageConfig config) async {
     if (!config.isValid) {
-      print('R2 配置无效');
+      Logger.warning('R2 配置无效', 'R2Storage');
       return false;
     }
 
@@ -46,9 +47,9 @@ class R2StorageService {
       
       // 打印配置信息
       if (_customDomain != null && _customDomain!.isNotEmpty) {
-        print('✅ R2 自定义域名: $_customDomain');
+        Logger.info('R2 自定义域名: $_customDomain', 'R2Storage');
       } else {
-        print('⚠️ 未配置自定义域名，将使用预签名 URL');
+        Logger.warning('未配置自定义域名，将使用预签名 URL', 'R2Storage');
       }
 
       // 检查 bucket 是否存在
@@ -56,7 +57,7 @@ class R2StorageService {
 
       return true;
     } catch (e) {
-      print('初始化 R2 失败: $e');
+      Logger.error('初始化 R2 失败', e, null, 'R2Storage');
       _initialized = false;
       return false;
     }
@@ -70,10 +71,10 @@ class R2StorageService {
       final exists = await _client!.bucketExists(_bucketName!);
       if (!exists) {
         await _client!.makeBucket(_bucketName!);
-        print('创建 bucket: $_bucketName');
+        Logger.info('创建 bucket: $_bucketName', 'R2Storage');
       }
     } catch (e) {
-      print('检查/创建 bucket 失败: $e');
+      Logger.error('检查/创建 bucket 失败', e, null, 'R2Storage');
     }
   }
 
@@ -84,7 +85,7 @@ class R2StorageService {
   /// 如果配置了自定义域名，直接使用公开 URL；否则使用预签名 URL
   Future<String?> uploadFile(File file, String objectName) async {
     if (!isInitialized) {
-      print('R2 未初始化');
+      Logger.warning('R2 未初始化', 'R2Storage');
       return null;
     }
 
@@ -92,7 +93,7 @@ class R2StorageService {
       final fileStream = file.openRead().map((chunk) => Uint8List.fromList(chunk));
       final fileSize = await file.length();
 
-      print('📤 上传文件到 R2: $objectName (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)');
+      Logger.info('上传文件到 R2: $objectName (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)', 'R2Storage');
 
       await _client!.putObject(
         _bucketName!,
@@ -101,27 +102,27 @@ class R2StorageService {
         size: fileSize,
       );
 
-      print('✅ 文件上传成功');
+      Logger.success('文件上传成功', 'R2Storage');
 
       // 如果配置了自定义域名，直接返回公开 URL（永久有效）
       if (_customDomain != null && _customDomain!.isNotEmpty) {
         final publicUrl = getPublicUrl(objectName);
-        print('✅ 使用自定义域名 URL（永久有效）');
+        Logger.info('使用自定义域名 URL（永久有效）', 'R2Storage');
         return publicUrl;
       }
 
       // 否则使用预签名 URL（7天有效）
-      print('⚠️ 未配置自定义域名，使用预签名 URL（7天有效）');
+      Logger.warning('未配置自定义域名，使用预签名 URL（7天有效）', 'R2Storage');
       final presignedUrl = await getPresignedUrl(objectName);
       if (presignedUrl != null) {
         return presignedUrl;
       }
 
       // 最后回退到公开 URL
-      print('⚠️ 预签名URL生成失败，回退到公开URL');
+      Logger.warning('预签名URL生成失败，回退到公开URL', 'R2Storage');
       return getPublicUrl(objectName);
     } catch (e) {
-      print('❌ 上传文件失败: $e');
+      Logger.error('上传文件失败', e, null, 'R2Storage');
       return null;
     }
   }
@@ -143,7 +144,7 @@ class R2StorageService {
   /// 下载文件
   Future<bool> downloadFile(String objectName, String savePath) async {
     if (!isInitialized) {
-      print('R2 未初始化');
+      Logger.warning('R2 未初始化', 'R2Storage');
       return false;
     }
 
@@ -158,7 +159,7 @@ class R2StorageService {
 
       return true;
     } catch (e) {
-      print('下载文件失败: $e');
+      Logger.error('下载文件失败', e, null, 'R2Storage');
       return false;
     }
   }
@@ -166,7 +167,7 @@ class R2StorageService {
   /// 删除文件
   Future<bool> deleteFile(String objectName) async {
     if (!isInitialized) {
-      print('R2 未初始化');
+      Logger.warning('R2 未初始化', 'R2Storage');
       return false;
     }
 
@@ -174,7 +175,7 @@ class R2StorageService {
       await _client!.removeObject(_bucketName!, objectName);
       return true;
     } catch (e) {
-      print('删除文件失败: $e');
+      Logger.error('删除文件失败', e, null, 'R2Storage');
       return false;
     }
   }
@@ -195,7 +196,7 @@ class R2StorageService {
 
       return true;
     } catch (e) {
-      print('删除歌曲文件失败: $e');
+      Logger.error('删除歌曲文件失败', e, null, 'R2Storage');
       return false;
     }
   }
@@ -220,7 +221,7 @@ class R2StorageService {
         }
       }
     } catch (e) {
-      print('删除前缀文件失败: $e');
+      Logger.error('删除前缀文件失败', e, null, 'R2Storage');
     }
   }
 
@@ -231,7 +232,7 @@ class R2StorageService {
     
     // 优先使用自定义域名（推荐）
     if (_customDomain != null && _customDomain!.isNotEmpty) {
-      print('🌐 使用自定义域名: https://$_customDomain/$objectName');
+      Logger.info('使用自定义域名: https://$_customDomain/$objectName', 'R2Storage');
       return 'https://$_customDomain/$objectName';
     }
     
@@ -260,10 +261,10 @@ class R2StorageService {
         objectName,
         expires: expirySeconds,
       );
-      print('✅ 生成预签名URL: $url');
+      Logger.success('生成预签名URL: $url', 'R2Storage');
       return url;
     } catch (e) {
-      print('❌ 生成预签名URL失败: $e');
+      Logger.error('生成预签名URL失败', e, null, 'R2Storage');
       return null;
     }
   }
@@ -288,7 +289,7 @@ class R2StorageService {
       final stat = await _client!.statObject(_bucketName!, objectName);
       return stat.size;
     } catch (e) {
-      print('获取文件大小失败: $e');
+      Logger.error('获取文件大小失败', e, null, 'R2Storage');
       return null;
     }
   }

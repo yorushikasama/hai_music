@@ -15,6 +15,7 @@ import '../widgets/draggable_window_area.dart';
 import '../services/music_api_service.dart';
 import '../services/playlist_scraper_service.dart';
 import '../services/data_cache_service.dart';
+import '../utils/logger.dart';
 import 'playlist_detail_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -81,7 +82,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       // 生成新的每日推荐
       await _generateDailyRecommendations();
     } catch (e) {
-      print('❌ [Discover] 加载每日推荐失败: $e');
+      Logger.error('加载每日推荐失败', e, null, 'DiscoverScreen');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -106,7 +107,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       }
 
       // 并行获取所有歌单的歌曲（性能优化 + 超时控制）
-      print('🚀 并行加载 ${selectedPlaylists.length} 个歌单...');
+      Logger.success('成功加载 ${selectedPlaylists.length} 个推荐歌单', 'DiscoverScreen');
       final futures = selectedPlaylists.map((playlist) =>
         _apiService.getPlaylistSongs(
           playlistId: playlist.id,
@@ -116,12 +117,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
          .timeout(
           const Duration(seconds: 10),
           onTimeout: () {
-            print('⏰ 加载歌单超时: ${playlist.title}');
+            Logger.network('从API加载推荐歌单', 'DiscoverScreen');
             return <Song>[];
           },
         )
          .catchError((e) {
-          print('⚠️ 加载歌单失败: ${playlist.title}');
+          Logger.error('从API加载推荐歌单失败', e, null, 'DiscoverScreen');
           return <Song>[];
         })
       ).toList();
@@ -130,7 +131,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final songLists = await Future.wait(futures).timeout(
         const Duration(seconds: 30),
         onTimeout: () {
-          print('⏰ 并行加载总超时');
+          Logger.network('从API加载推荐歌单', 'DiscoverScreen');
           return <List<Song>>[];
         },
       );
@@ -140,7 +141,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           allSongs.addAll(songs);
         }
       }
-      print('✅ 并行加载完成，共获取 ${allSongs.length} 首歌曲');
+      Logger.success('成功获取 ${allSongs.length} 首歌曲', 'DiscoverScreen');
 
       // 从所有歌曲中随机选择20首
       if (allSongs.isNotEmpty) {
@@ -173,7 +174,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         }
       }
     } catch (e) {
-      print('❌ [Discover] 生成每日推荐失败: $e');
+      Logger.error('生成每日推荐失败', e, null, 'DiscoverScreen');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -203,7 +204,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final playlists = await _scraperService.fetchRecommendedPlaylists().timeout(
         const Duration(seconds: 15),
         onTimeout: () {
-          print('⏰ 爬取推荐歌单超时');
+          Logger.info('开始加载推荐歌单...', 'DiscoverScreen');
           return <RecommendedPlaylist>[];
         },
       );
@@ -238,7 +239,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         }
       }
     } catch (e) {
-      print('❌ [Discover] 加载推荐歌单失败: $e');
+      Logger.error('加载推荐歌单失败', e, null, 'DiscoverScreen');
       if (mounted) {
         setState(() => _isLoadingPlaylists = false);
       }

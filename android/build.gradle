@@ -1,12 +1,12 @@
 buildscript {
-    ext.kotlin_version = '2.1.0'
+    ext.kotlin_version = '1.9.22'
     repositories {
         google()
         mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.6.0'
+        classpath 'com.android.tools.build:gradle:8.1.4'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -21,6 +21,38 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    // 为缺少 namespace 的插件自动添加
+    afterEvaluate { subproject ->
+        if (subproject.hasProperty('android')) {
+            subproject.android {
+                if (namespace == null) {
+                    def manifest = subproject.file('src/main/AndroidManifest.xml')
+                    if (manifest.exists()) {
+                        def xml = new XmlSlurper().parse(manifest)
+                        def packageName = xml.'@package'.text()
+                        if (packageName) {
+                            namespace = packageName
+                        }
+                    }
+                }
+                
+                // 统一设置 JVM 目标为 1.8
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_1_8
+                    targetCompatibility JavaVersion.VERSION_1_8
+                }
+            }
+        }
+        
+        // 为 Kotlin 项目设置 JVM 目标
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = "1.8"
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(':app')

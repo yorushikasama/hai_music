@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
@@ -11,6 +12,8 @@ import '../utils/platform_utils.dart';
 import '../widgets/draggable_window_area.dart';
 import '../services/music_api_service.dart';
 import '../services/preferences_cache_service.dart';
+import '../services/download_manager.dart';
+import 'download_progress_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final String? initialQuery;
@@ -33,6 +36,8 @@ class _SearchScreenState extends State<SearchScreen> {
   int _currentPage = 1;
   String _currentQuery = '';
   Timer? _debounceTimer;
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
   
   static const int _debounceMilliseconds = 300; // 防抖延迟
   static const String _historyKey = 'search_history';
@@ -47,7 +52,7 @@ class _SearchScreenState extends State<SearchScreen> {
     
     // 如果有初始搜索词，自动执行搜索
     if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
-      print('📝 SearchScreen initState: ${widget.initialQuery}');
+      Logger.debug('📝 SearchScreen initState: ${widget.initialQuery}');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _searchController.text = widget.initialQuery!;
         _performSearch(widget.initialQuery!);
@@ -62,7 +67,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (widget.initialQuery != null && 
         widget.initialQuery!.isNotEmpty && 
         widget.initialQuery != oldWidget.initialQuery) {
-      print('📝 SearchScreen didUpdateWidget: ${widget.initialQuery}');
+      Logger.debug('📝 SearchScreen didUpdateWidget: ${widget.initialQuery}');
       _searchController.text = widget.initialQuery!;
       _performSearch(widget.initialQuery!);
     }
@@ -169,7 +174,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void _performSearch(String query) async {
     if (query.trim().isEmpty) return;
     
-    print('🔎 执行搜索: $query');
+    Logger.debug('🔎 执行搜索: $query');
 
     setState(() {
       _isSearching = true;
@@ -276,13 +281,121 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '搜索',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: colors.textPrimary,
-                          ),
+                        Row(
+                          children: [
+                            Icon(
+                              _isSelectionMode ? Icons.checklist_rounded : Icons.search,
+                              color: _isSelectionMode ? colors.accent : colors.textPrimary,
+                              size: 32,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _isSelectionMode ? '选择歌曲' : '搜索',
+                                    style: TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                      color: colors.textPrimary,
+                                    ),
+                                  ),
+                                  if (_isSelectionMode && _selectedIds.isNotEmpty)
+                                    Text(
+                                      '已选择 ${_selectedIds.length} 首',
+                                      style: TextStyle(
+                                        color: colors.accent,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (_searchResults.isNotEmpty && !_isSelectionMode)
+                              IconButton(
+                                icon: Icon(Icons.checklist_rounded, color: colors.textSecondary, size: 24),
+                                onPressed: () {
+                                  setState(() {
+                                    _isSelectionMode = true;
+                                  });
+                                },
+                                tooltip: '多选',
+                              ),
+                            if (_isSelectionMode) ...[
+                              if (_selectedIds.isNotEmpty)
+                                PopupMenuButton<String>(
+                                  icon: Icon(Icons.more_vert, color: colors.textSecondary, size: 22),
+                                  color: colors.surface,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  offset: const Offset(0, 50),
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem<String>(
+                                      value: 'favorite',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.favorite_border, color: colors.accent, size: 20),
+                                          const SizedBox(width: 12),
+                                          Text('批量喜欢', style: TextStyle(color: colors.textPrimary)),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem<String>(
+                                      value: 'download',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.download_outlined, color: colors.accent, size: 20),
+                                          const SizedBox(width: 12),
+                                          Text('批量下载', style: TextStyle(color: colors.textPrimary)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  onSelected: (value) {
+                                    if (value == 'favorite') {
+                                      _batchAddToFavorites();
+                                    } else if (value == 'download') {
+                                      _batchDownload();
+                                    }
+                                  },
+                                ),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    if (_selectedIds.length == _searchResults.length) {
+                                      _selectedIds.clear();
+                                    } else {
+                                      _selectedIds.addAll(_searchResults.map((s) => s.id));
+                                    }
+                                  });
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: const Size(0, 36),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  _selectedIds.length == _searchResults.length ? '全选' : '全选',
+                                  style: TextStyle(color: colors.accent, fontSize: 13),
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.close, color: colors.textSecondary, size: 22),
+                                onPressed: () {
+                                  setState(() {
+                                    _isSelectionMode = false;
+                                    _selectedIds.clear();
+                                  });
+                                },
+                                tooltip: '取消',
+                                padding: const EdgeInsets.all(8),
+                                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                              ),
+                            ],
+                          ],
                         ),
                   const SizedBox(height: 20),
                   TextField(
@@ -540,9 +653,25 @@ class _SearchScreenState extends State<SearchScreen> {
         }
         
         final song = _searchResults[index];
+        final isSelected = _selectedIds.contains(song.id);
+        
         return ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: ClipRRect(
+          leading: _isSelectionMode
+              ? Checkbox(
+                  value: isSelected,
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _selectedIds.add(song.id);
+                      } else {
+                        _selectedIds.remove(song.id);
+                      }
+                    });
+                  },
+                  activeColor: colors.accent,
+                )
+              : ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: CachedNetworkImage(
               imageUrl: song.coverUrl,
@@ -582,16 +711,226 @@ class _SearchScreenState extends State<SearchScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          trailing: IconButton(
+          trailing: _isSelectionMode
+              ? null
+              : PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: colors.textSecondary),
-            onPressed: () {},
+            color: colors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            offset: const Offset(0, 40),
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'favorite',
+                child: Consumer<MusicProvider>(
+                  builder: (context, musicProvider, child) {
+                    final isFavorite = musicProvider.isFavorite(song.id);
+                    return Row(
+                      children: [
+                        Icon(
+                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: isFavorite ? Colors.red : colors.textPrimary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          isFavorite ? '取消喜欢' : '加入喜欢',
+                          style: TextStyle(color: colors.textPrimary),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'download',
+                child: Row(
+                  children: [
+                    Icon(Icons.download_outlined, color: colors.textPrimary, size: 20),
+                    const SizedBox(width: 12),
+                    Text(
+                      '下载到本地',
+                      style: TextStyle(color: colors.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'play',
+                child: Row(
+                  children: [
+                    Icon(Icons.play_arrow, color: colors.textPrimary, size: 20),
+                    const SizedBox(width: 12),
+                    Text(
+                      '播放',
+                      style: TextStyle(color: colors.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (value) => _handleMenuAction(context, value, song),
           ),
           onTap: () {
-            Provider.of<MusicProvider>(context, listen: false)
-                .playSong(song, playlist: _searchResults);
+            if (_isSelectionMode) {
+              setState(() {
+                if (isSelected) {
+                  _selectedIds.remove(song.id);
+                } else {
+                  _selectedIds.add(song.id);
+                }
+              });
+            } else {
+              Provider.of<MusicProvider>(context, listen: false)
+                  .playSong(song, playlist: _searchResults);
+            }
           },
         );
       },
+    );
+  }
+
+  /// 处理菜单操作
+  Future<void> _handleMenuAction(BuildContext context, String action, Song song) async {
+    final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    
+    switch (action) {
+      case 'favorite':
+        await musicProvider.toggleFavorite(song.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              musicProvider.isFavorite(song.id)
+                  ? '已添加到我喜欢'
+                  : '已从我喜欢中移除',
+            ),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        break;
+        
+      case 'download':
+        final manager = DownloadManager();
+        await manager.init();
+        final success = await manager.addDownload(song);
+        
+        if (!mounted) return;
+        
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('已添加到下载队列：${song.title}'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: '查看',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DownloadProgressScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('《${song.title}》已在下载列表中'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        break;
+        
+      case 'play':
+        musicProvider.playSong(song, playlist: _searchResults);
+        break;
+    }
+  }
+
+  /// 批量添加到喜欢
+  Future<void> _batchAddToFavorites() async {
+    final selectedSongs = _searchResults
+        .where((s) => _selectedIds.contains(s.id))
+        .toList();
+
+    if (selectedSongs.isEmpty) return;
+
+    final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    int successCount = 0;
+
+    for (final song in selectedSongs) {
+      final isFavorite = musicProvider.isFavorite(song.id);
+      if (!isFavorite) {
+        final success = await musicProvider.toggleFavorite(song.id);
+        if (success) successCount++;
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已添加 $successCount 首歌曲到我喜欢'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// 批量下载
+  Future<void> _batchDownload() async {
+    final selectedSongs = _searchResults
+        .where((s) => _selectedIds.contains(s.id))
+        .toList();
+
+    if (selectedSongs.isEmpty) return;
+
+    final manager = DownloadManager();
+    await manager.init();
+
+    int successCount = 0;
+    for (final song in selectedSongs) {
+      final success = await manager.addDownload(song);
+      if (success) successCount++;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已添加 $successCount 首歌曲到下载队列'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: '查看',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DownloadProgressScreen(),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

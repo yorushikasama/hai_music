@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import '../utils/logger.dart';
 
 /// 缓存信息模型
 class CacheInfo {
@@ -40,13 +41,13 @@ class CacheManagerService {
     if (!forceRefresh && _cachedInfo != null) {
       final age = DateTime.now().difference(_cachedInfo!.timestamp).inSeconds;
       if (age < _cacheValiditySeconds) {
-        print('📊 [缓存] 使用缓存的大小信息 ($age秒前)');
+        Logger.cache('使用缓存的大小信息 ($age秒前)', 'CacheManager');
         return _cachedInfo!;
       }
     }
 
     // 重新计算
-    print('📊 [缓存] 重新计算缓存大小...');
+    Logger.cache('重新计算缓存大小...', 'CacheManager');
     final audioSize = await getAudioCacheSize();
     final coverSize = await getCoverCacheSize();
     final totalSize = audioSize + coverSize;
@@ -79,7 +80,7 @@ class CacheManagerService {
 
       return await _calculateDirectorySize(audioDir);
     } catch (e) {
-      print('获取音频缓存大小失败: $e');
+      Logger.error('获取音频缓存大小失败', e, null, 'CacheManager');
       return 0;
     }
   }
@@ -96,7 +97,7 @@ class CacheManagerService {
 
       return await _calculateDirectorySize(coverDir);
     } catch (e) {
-      print('获取封面缓存大小失败: $e');
+      Logger.error('获取封面缓存大小失败', e, null, 'CacheManager');
       return 0;
     }
   }
@@ -120,7 +121,7 @@ class CacheManagerService {
 
       if (await musicDir.exists()) {
         await musicDir.delete(recursive: true);
-        print('✅ 缓存清理完成');
+        Logger.success('缓存清理完成', 'CacheManager');
 
         // 清除缓存信息
         _invalidateCache();
@@ -130,7 +131,7 @@ class CacheManagerService {
 
       return true;
     } catch (e) {
-      print('❌ 清理缓存失败: $e');
+      Logger.error('清理缓存失败', e, null, 'CacheManager');
       return false;
     }
   }
@@ -143,7 +144,7 @@ class CacheManagerService {
 
       if (await audioDir.exists()) {
         await audioDir.delete(recursive: true);
-        print('✅ 音频缓存清理完成');
+        Logger.success('音频缓存清理完成', 'CacheManager');
 
         // 清除缓存信息
         _invalidateCache();
@@ -153,7 +154,7 @@ class CacheManagerService {
 
       return true;
     } catch (e) {
-      print('❌ 清理音频缓存失败: $e');
+      Logger.error('清理音频缓存失败', e, null, 'CacheManager');
       return false;
     }
   }
@@ -166,7 +167,7 @@ class CacheManagerService {
 
       if (await coverDir.exists()) {
         await coverDir.delete(recursive: true);
-        print('✅ 封面缓存清理完成');
+        Logger.success('封面缓存清理完成', 'CacheManager');
 
         // 清除缓存信息
         _invalidateCache();
@@ -176,7 +177,7 @@ class CacheManagerService {
 
       return true;
     } catch (e) {
-      print('❌ 清理封面缓存失败: $e');
+      Logger.error('清理封面缓存失败', e, null, 'CacheManager');
       return false;
     }
   }
@@ -184,7 +185,7 @@ class CacheManagerService {
   /// 使缓存信息失效
   void _invalidateCache() {
     _cachedInfo = null;
-    print('🔄 [缓存] 缓存信息已失效');
+    Logger.cache('缓存信息已失效', 'CacheManager');
   }
 
   /// 格式化文件大小

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/music_provider.dart';
@@ -116,7 +117,7 @@ class MiniPlayer extends StatelessWidget {
                                   child: GestureDetector(
                                     onTap: onArtistTap != null
                                         ? () {
-                                            print('点击歌手: ${song.artist}');
+                                            Logger.debug('点击歌手: ${song.artist}');
                                             onArtistTap!(song.artist);
                                           }
                                         : null,

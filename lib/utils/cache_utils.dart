@@ -33,40 +33,5 @@ class CacheUtils {
   static int getCurrentTimestamp() {
     return DateTime.now().millisecondsSinceEpoch;
   }
-
-  /// 检查缓存是否有效
-  /// 
-  /// [timestamp] 缓存时间戳
-  /// [hours] 有效期 (小时)
-  /// 
-  /// 返回 true 表示缓存仍然有效
-  static bool isCacheValid(int timestamp, {int hours = 24}) {
-    return !isCacheExpired(timestamp, hours: hours);
-  }
-
-  /// 格式化缓存剩余时间
-  /// 
-  /// [timestamp] 缓存时间戳
-  /// [hours] 有效期 (小时)
-  /// 
-  /// 返回剩余时间的可读字符串,如 "还剩 2 小时 30 分钟"
-  static String formatRemainingTime(int timestamp, {int hours = 24}) {
-    if (isCacheExpired(timestamp, hours: hours)) {
-      return '已过期';
-    }
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final expiryTime = timestamp + (hours * 60 * 60 * 1000);
-    final remainingMs = expiryTime - now;
-    
-    final remainingHours = remainingMs ~/ (60 * 60 * 1000);
-    final remainingMinutes = (remainingMs % (60 * 60 * 1000)) ~/ (60 * 1000);
-    
-    if (remainingHours > 0) {
-      return '还剩 $remainingHours 小时 $remainingMinutes 分钟';
-    } else {
-      return '还剩 $remainingMinutes 分钟';
-    }
-  }
 }
 

@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/logger.dart';
 
 /// SharedPreferences 缓存服务 (单例模式)
 /// 避免重复获取 SharedPreferences 实例,提升性能
@@ -16,9 +17,13 @@ class PreferencesCacheService {
   Future<void> init() async {
     if (_initialized) return;
     
-    _prefs = await SharedPreferences.getInstance();
-    _initialized = true;
-    print('✅ [PreferencesCache] 初始化完成');
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      _initialized = true;
+      Logger.info('✅ [PreferencesCache] 初始化完成');
+    } catch (e) {
+      Logger.error('初始化 SharedPreferences 失败', e, null, 'PreferencesCache');
+    }
   }
 
   /// 确保已初始化

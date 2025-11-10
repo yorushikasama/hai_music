@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 import 'package:provider/provider.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
@@ -35,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // 切换到搜索页并执行搜索
   void _navigateToSearch(String query) {
-    print('🔍 导航到搜索页，关键词: $query');
+    Logger.debug('🔍 导航到搜索页，关键词: $query');
     setState(() {
       _searchQuery = query;
       _searchScreenKey = UniqueKey(); // 生成新的 key 强制重建

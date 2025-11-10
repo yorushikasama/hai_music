@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/song.dart';
+import '../utils/logger.dart';
 
 /// 🔧 重新设计的音频处理服务
 /// 核心理念：单曲播放模式，简化状态管理
@@ -84,29 +85,43 @@ class MusicAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       final stopwatch = Stopwatch()..start();
       _log('▶️ 播放: ${song.title}');
       
-      // 更新显示队列（用于系统通知栏显示）
+      // 🔧 关键修复：先更新 mediaItem，确保通知栏立即显示正确的歌曲
+      final currentMediaItem = _songToMediaItem(song);
+      mediaItem.add(currentMediaItem);
+      
+      // 🔧 关键修复：更新显示队列时，将当前播放的歌曲放在队列的第一位
+      // 这样即使 currentIndexStream 触发 index=0，也会显示正确的歌曲
       if (displayQueue != null && displayQueue.isNotEmpty) {
-        _queue = displayQueue.map((s) => _songToMediaItem(s)).toList();
+        // 找到当前歌曲在队列中的位置
+        final currentIndex = displayQueue.indexWhere((s) => s.id == song.id);
+        
+        // 重新排列队列：当前歌曲放在第一位
+        final List<Song> reorderedQueue = [];
+        if (currentIndex >= 0) {
+          reorderedQueue.add(displayQueue[currentIndex]);
+          reorderedQueue.addAll(displayQueue.where((s) => s.id != song.id));
+        } else {
+          reorderedQueue.addAll(displayQueue);
+        }
+        
+        _queue = reorderedQueue.map((s) => _songToMediaItem(s)).toList();
         queue.add(_queue);
       }
       
       // 创建单曲播放源
       final source = AudioSource.uri(
         Uri.parse(song.audioUrl),
-        tag: _songToMediaItem(song),
+        tag: currentMediaItem,
       );
 
       // 直接设置并播放
       await _player.setAudioSource(source);
       await _player.play();
       
-      // 更新 mediaItem
-      mediaItem.add(_songToMediaItem(song));
-      
       stopwatch.stop();
       _log('✅ 播放成功，耗时: ${stopwatch.elapsedMilliseconds}ms');
     } catch (e) {
-      _log('❌ 播放失败: $e');
+      Logger.error('播放器错误', e, null, 'AudioHandler');
       rethrow;
     }
   }

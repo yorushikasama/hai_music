@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/favorite_song.dart';
 import '../models/storage_config.dart';
 import '../utils/error_handler.dart';
+import '../utils/logger.dart';
 
 /// Supabase 数据库服务
 class SupabaseService {
@@ -16,7 +17,7 @@ class SupabaseService {
   /// 初始化 Supabase
   Future<bool> initialize(StorageConfig config) async {
     if (!config.isValid) {
-      print('Supabase 配置无效');
+      Logger.warning('Supabase 配置无效', 'Supabase');
       return false;
     }
 
@@ -47,9 +48,9 @@ class SupabaseService {
       // 尝试查询表，如果失败说明表不存在
       await _client!.from('favorite_songs').select().limit(1);
     } catch (e) {
-      print('收藏表可能不存在，请在 Supabase 中手动创建表');
-      print('建议的表结构：');
-      print('''
+      Logger.warning('收藏表可能不存在，请在 Supabase 中手动创建表', 'Supabase');
+      Logger.info('建议的表结构：', 'Supabase');
+      Logger.info('''
 CREATE TABLE favorite_songs (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -70,7 +71,7 @@ CREATE TABLE favorite_songs (
 -- 创建索引
 CREATE INDEX idx_favorite_songs_user_id ON favorite_songs(user_id);
 CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
-      ''');
+      ''', 'Supabase');
     }
   }
 
@@ -80,7 +81,7 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
   /// 添加收藏歌曲
   Future<bool> addFavorite(FavoriteSong song) async {
     if (!isInitialized) {
-      print('Supabase 未初始化');
+      Logger.warning('Supabase 未初始化', 'Supabase');
       return false;
     }
 
@@ -96,7 +97,7 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
   /// 删除收藏歌曲
   Future<bool> removeFavorite(String songId) async {
     if (!isInitialized) {
-      print('Supabase 未初始化');
+      Logger.warning('Supabase 未初始化', 'Supabase');
       return false;
     }
 
@@ -112,12 +113,12 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
   /// 获取所有收藏歌曲
   Future<List<FavoriteSong>> getFavorites() async {
     if (!isInitialized) {
-      print('❌ Supabase 未初始化');
+      Logger.error('Supabase 未初始化', null, null, 'Supabase');
       return [];
     }
 
     try {
-      print('🔍 正在从 Supabase 获取收藏列表...');
+      Logger.database('正在从 Supabase 获取收藏列表...', 'Supabase');
       final response = await _client!
           .from('favorite_songs')
           .select()
@@ -127,7 +128,7 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
           .map((json) => FavoriteSong.fromJson(json))
           .toList();
       
-      print('✅ 从 Supabase 获取到 ${favorites.length} 首歌曲');
+      Logger.database('从 Supabase 获取到 ${favorites.length} 首歌曲', 'Supabase');
       return favorites;
     } catch (e, stackTrace) {
       ErrorHandler.logError('获取收藏列表', e, stackTrace);
@@ -158,7 +159,7 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
   /// 更新收藏歌曲信息
   Future<bool> updateFavorite(FavoriteSong song) async {
     if (!isInitialized) {
-      print('Supabase 未初始化');
+      Logger.warning('Supabase 未初始化', 'Supabase');
       return false;
     }
 
@@ -177,7 +178,7 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
   /// 批量同步收藏
   Future<bool> syncFavorites(List<FavoriteSong> songs) async {
     if (!isInitialized) {
-      print('Supabase 未初始化');
+      Logger.warning('Supabase 未初始化', 'Supabase');
       return false;
     }
 
@@ -194,7 +195,7 @@ CREATE INDEX idx_favorite_songs_created_at ON favorite_songs(created_at DESC);
   /// 清除所有收藏
   Future<bool> clearAllFavorites() async {
     if (!isInitialized) {
-      print('Supabase 未初始化');
+      Logger.warning('Supabase 未初始化', 'Supabase');
       return false;
     }
 

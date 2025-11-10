@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../models/song.dart';
 import '../utils/cache_utils.dart';
+import '../utils/logger.dart';
 import 'preferences_cache_service.dart';
 import 'playlist_scraper_service.dart';
 
@@ -45,10 +46,10 @@ class DataCacheService {
       await _prefsCache.setString(_playlistsCacheKey, jsonString);
       await _prefsCache.setInt(_playlistsTimestampKey, CacheUtils.getCurrentTimestamp());
       
-      print('✅ [DataCache] 已保存 ${playlists.length} 个推荐歌单');
+      Logger.cache('已保存 ${playlists.length} 个推荐歌单', 'DataCache');
       return true;
     } catch (e) {
-      print('❌ [DataCache] 保存推荐歌单失败: $e');
+      Logger.error('保存推荐歌单失败', e, null, 'DataCache');
       return false;
     }
   }
@@ -60,7 +61,7 @@ class DataCacheService {
       
       // 检查缓存是否过期
       if (CacheUtils.isCacheExpired(timestamp, hours: cacheHours)) {
-        print('⏰ [DataCache] 推荐歌单缓存已过期');
+        Logger.cache('推荐歌单缓存已过期', 'DataCache');
         return null;
       }
       
@@ -76,10 +77,10 @@ class DataCacheService {
         coverUrl: json['coverUrl'] as String,
       )).toList();
       
-      print('✅ [DataCache] 从缓存加载 ${playlists.length} 个推荐歌单');
+      Logger.cache('从缓存加载 ${playlists.length} 个推荐歌单', 'DataCache');
       return playlists;
     } catch (e) {
-      print('❌ [DataCache] 获取推荐歌单失败: $e');
+      Logger.error('获取推荐歌单失败', e, null, 'DataCache');
       return null;
     }
   }
@@ -111,10 +112,10 @@ class DataCacheService {
       await _prefsCache.setString(_dailySongsCacheKey, jsonString);
       await _prefsCache.setInt(_dailySongsTimestampKey, CacheUtils.getCurrentTimestamp());
       
-      print('✅ [DataCache] 已保存 ${songs.length} 首每日推荐');
+      Logger.cache('已保存 ${songs.length} 首每日推荐', 'DataCache');
       return true;
     } catch (e) {
-      print('❌ [DataCache] 保存每日推荐失败: $e');
+      Logger.error('保存每日推荐失败', e, null, 'DataCache');
       return false;
     }
   }
@@ -126,7 +127,7 @@ class DataCacheService {
       
       // 检查缓存是否过期
       if (CacheUtils.isCacheExpired(timestamp, hours: cacheHours)) {
-        print('⏰ [DataCache] 每日推荐缓存已过期');
+        Logger.cache('每日推荐缓存已过期', 'DataCache');
         return null;
       }
       
@@ -147,10 +148,10 @@ class DataCacheService {
         platform: json['platform'] as String? ?? 'qq',
       )).toList();
       
-      print('✅ [DataCache] 从缓存加载 ${songs.length} 首每日推荐');
+      Logger.cache('从缓存加载 ${songs.length} 首每日推荐', 'DataCache');
       return songs;
     } catch (e) {
-      print('❌ [DataCache] 获取每日推荐失败: $e');
+      Logger.error('获取每日推荐失败', e, null, 'DataCache');
       return null;
     }
   }
@@ -185,10 +186,10 @@ class DataCacheService {
       await _prefsCache.setString('$_playlistDetailPrefix$playlistId', jsonString);
       await _prefsCache.setInt('$_playlistDetailTimestampPrefix$playlistId', CacheUtils.getCurrentTimestamp());
       
-      print('✅ [DataCache] 已保存歌单 $playlistId 的 ${songs.length} 首歌曲');
+      Logger.cache('已保存歌单 $playlistId 的 ${songs.length} 首歌曲', 'DataCache');
       return true;
     } catch (e) {
-      print('❌ [DataCache] 保存歌单详情失败: $e');
+      Logger.error('保存歌单详情失败', e, null, 'DataCache');
       return false;
     }
   }
@@ -200,7 +201,7 @@ class DataCacheService {
       
       // 检查缓存是否过期
       if (CacheUtils.isCacheExpired(timestamp, hours: cacheHours)) {
-        print('⏰ [DataCache] 歌单 $playlistId 缓存已过期');
+        Logger.cache('歌单 $playlistId 缓存已过期', 'DataCache');
         return null;
       }
       
@@ -223,14 +224,14 @@ class DataCacheService {
         platform: json['platform'] as String? ?? 'qq',
       )).toList();
       
-      print('✅ [DataCache] 从缓存加载歌单 $playlistId 的 ${songs.length} 首歌曲');
+      Logger.cache('从缓存加载歌单 $playlistId 的 ${songs.length} 首歌曲', 'DataCache');
       
       return {
         'songs': songs,
         'totalCount': data['totalCount'] as int,
       };
     } catch (e) {
-      print('❌ [DataCache] 获取歌单详情失败: $e');
+      Logger.error('获取歌单详情失败', e, null, 'DataCache');
       return null;
     }
   }
@@ -251,10 +252,10 @@ class DataCacheService {
           await _prefsCache.remove(key);
         }
       }
-      print('✅ [DataCache] 已清除所有歌单详情缓存');
+      Logger.cache('已清除所有歌单详情缓存', 'DataCache');
       return true;
     } catch (e) {
-      print('❌ [DataCache] 清除歌单详情缓存失败: $e');
+      Logger.error('清除歌单详情缓存失败', e, null, 'DataCache');
       return false;
     }
   }
@@ -268,10 +269,10 @@ class DataCacheService {
       await _prefsCache.setString('$_userPlaylistsPrefix$qqNumber', jsonString);
       await _prefsCache.setInt('$_userPlaylistsTimestampPrefix$qqNumber', CacheUtils.getCurrentTimestamp());
 
-      print('✅ [DataCache] 已保存用户 $qqNumber 的 ${playlists.length} 个歌单');
+      Logger.cache('已保存用户 $qqNumber 的 ${playlists.length} 个歌单', 'DataCache');
       return true;
     } catch (e) {
-      print('❌ [DataCache] 保存用户歌单列表失败: $e');
+      Logger.error('保存用户歌单列表失败', e, null, 'DataCache');
       return false;
     }
   }
@@ -283,7 +284,7 @@ class DataCacheService {
 
       // 检查缓存是否过期
       if (CacheUtils.isCacheExpired(timestamp, hours: cacheHours)) {
-        print('⏰ [DataCache] 用户 $qqNumber 的歌单列表缓存已过期');
+        Logger.cache('用户 $qqNumber 的歌单列表缓存已过期', 'DataCache');
         return null;
       }
 
@@ -295,10 +296,10 @@ class DataCacheService {
       final List<dynamic> jsonList = json.decode(jsonString);
       final playlists = jsonList.map((item) => Map<String, dynamic>.from(item)).toList();
 
-      print('✅ [DataCache] 从缓存加载用户 $qqNumber 的 ${playlists.length} 个歌单');
+      Logger.cache('从缓存加载用户 $qqNumber 的 ${playlists.length} 个歌单', 'DataCache');
       return playlists;
     } catch (e) {
-      print('❌ [DataCache] 获取用户歌单列表失败: $e');
+      Logger.error('获取用户歌单列表失败', e, null, 'DataCache');
       return null;
     }
   }
@@ -319,10 +320,10 @@ class DataCacheService {
           await _prefsCache.remove(key);
         }
       }
-      print('✅ [DataCache] 已清除所有用户歌单列表缓存');
+      Logger.cache('已清除所有用户歌单列表缓存', 'DataCache');
       return true;
     } catch (e) {
-      print('❌ [DataCache] 清除用户歌单列表缓存失败: $e');
+      Logger.error('清除用户歌单列表缓存失败', e, null, 'DataCache');
       return false;
     }
   }
@@ -333,7 +334,7 @@ class DataCacheService {
     await clearDailySongs();
     await clearAllPlaylistDetails();
     await clearAllUserPlaylists();
-    print('✅ [DataCache] 已清除所有数据缓存');
+    Logger.cache('已清除所有数据缓存', 'DataCache');
     return true;
   }
 }

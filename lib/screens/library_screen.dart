@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/playlist.dart';
@@ -16,6 +17,9 @@ import 'playlist_detail_screen.dart';
 import 'storage_config_screen.dart';
 import 'favorites_screen.dart';
 import 'recent_play_screen.dart';
+import 'downloaded_songs_screen.dart';
+import 'download_progress_screen.dart';
+import '../services/download_manager.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -84,13 +88,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
               _isLoading = false;
             });
           }
-          print('✅ [Library] 从缓存加载 ${cachedPlaylists.length} 个歌单');
+          Logger.debug('✅ [Library] 从缓存加载 ${cachedPlaylists.length} 个歌单');
           return;
         }
       }
 
       // 缓存不存在或已过期，从 API 获取
-      print('🌐 [Library] 从 API 获取歌单列表...');
+      Logger.debug('🌐 [Library] 从 API 获取歌单列表...');
       final playlists = await _apiService.getUserPlaylists(
         qqNumber: _qqNumber,
       );
@@ -104,9 +108,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
       // 保存到缓存
       await _cacheService.saveUserPlaylists(_qqNumber, playlists);
-      print('✅ [Library] 从 API 加载 ${playlists.length} 个歌单并已缓存');
+      Logger.debug('✅ [Library] 从 API 加载 ${playlists.length} 个歌单并已缓存');
     } catch (e) {
-      print('❌ [Library] 加载歌单失败: $e');
+      Logger.debug('❌ [Library] 加载歌单失败: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -152,6 +156,56 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ],
               ),
               actions: [
+                // 下载进度按钮（带徽章）
+                ChangeNotifierProvider.value(
+                  value: DownloadManager(),
+                  child: Consumer<DownloadManager>(
+                    builder: (context, manager, child) {
+                      final downloadingCount = manager.downloadingTasks.length;
+                      return Stack(
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.download_outlined, color: colors.textPrimary),
+                            tooltip: '下载管理',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const DownloadProgressScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          if (downloadingCount > 0)
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: colors.accent,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 16,
+                                  minHeight: 16,
+                                ),
+                                child: Text(
+                                  downloadingCount.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
                 IconButton(
                   icon: Icon(Icons.cloud_outlined, color: colors.textPrimary),
                   tooltip: '云端同步设置',
@@ -372,6 +426,23 @@ if (_isLoading)
             },
           ),
         ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _buildActionCard(
+            context,
+            icon: Icons.download,
+            title: '本地下载',
+            color: Colors.green,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DownloadedSongsScreen(),
+                ),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
@@ -412,6 +483,7 @@ if (_isLoading)
           ],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             Container(
@@ -434,6 +506,9 @@ if (_isLoading)
                 fontWeight: FontWeight.w600,
                 color: colors.textPrimary,
               ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

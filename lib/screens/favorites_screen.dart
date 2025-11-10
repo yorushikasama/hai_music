@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,6 +9,8 @@ import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
 import '../extensions/favorite_song_extension.dart';
 import '../widgets/mini_player.dart';
+import '../services/download_manager.dart';
+import 'download_progress_screen.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
 
 /// 我喜欢的歌曲列表页面
@@ -23,6 +26,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   List<FavoriteSong> _filteredFavorites = [];
   bool _isLoading = true;
   bool _isSearching = false;
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -57,12 +62,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
     
-    print('📥 开始加载收藏列表...');
-    print('云同步状态: ${musicProvider.favoriteManager.isSyncEnabled}');
+    Logger.debug('📥 开始加载收藏列表...');
+    Logger.debug('云同步状态: ${musicProvider.favoriteManager.isSyncEnabled}');
     
     final favorites = await musicProvider.favoriteManager.getFavorites();
     
-    print('📥 加载完成，共 ${favorites.length} 首歌曲');
+    Logger.debug('📥 加载完成，共 ${favorites.length} 首歌曲');
     
     // 🔧 修复：刷新 MusicProvider 的收藏状态，确保 mini 播放器显示正确
     musicProvider.refreshFavorites();
@@ -121,44 +126,149 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         } : null,
                         child: Row(
                           children: [
-                            Icon(Icons.favorite, color: Colors.red, size: 26),
+                            Icon(
+                              _isSelectionMode ? Icons.checklist_rounded : Icons.favorite,
+                              color: _isSelectionMode ? colors.accent : Colors.red,
+                              size: 26,
+                            ),
                             SizedBox(width: 12),
-                            Text(
-                              '我喜欢',
-                              style: TextStyle(
-                                color: colors.textPrimary,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _isSelectionMode ? '选择歌曲' : '我喜欢',
+                                  style: TextStyle(
+                                    color: colors.textPrimary,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                if (_isSelectionMode && _selectedIds.isNotEmpty)
+                                  Text(
+                                    '已选择 ${_selectedIds.length} 首',
+                                    style: TextStyle(
+                                      color: colors.accent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ],
                         ),
                       ),
                 actions: [
-                  IconButton(
-                    icon: Icon(
-                      _isSearching ? Icons.close : Icons.search,
-                      color: colors.textSecondary,
-                      size: 22,
+                  if (_isSelectionMode) ...[
+                    // 批量操作菜单按钮
+                    if (_selectedIds.isNotEmpty)
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_vert, color: colors.textSecondary, size: 22),
+                        color: colors.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        offset: const Offset(0, 50),
+                        itemBuilder: (context) => [
+                          PopupMenuItem<String>(
+                            value: 'download',
+                            child: Row(
+                              children: [
+                                Icon(Icons.download_outlined, color: colors.accent, size: 20),
+                                const SizedBox(width: 12),
+                                Text('批量下载', style: TextStyle(color: colors.textPrimary)),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'remove',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                const SizedBox(width: 12),
+                                Text('批量移除', style: TextStyle(color: colors.textPrimary)),
+                              ],
+                            ),
+                          ),
+                        ],
+                        onSelected: (value) {
+                          if (value == 'download') {
+                            _batchDownload();
+                          } else if (value == 'remove') {
+                            _batchRemove();
+                          }
+                        },
+                      ),
+                    // 全选/取消全选
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          if (_selectedIds.length == _filteredFavorites.length) {
+                            _selectedIds.clear();
+                          } else {
+                            _selectedIds.addAll(_filteredFavorites.map((f) => f.id));
+                          }
+                        });
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 36),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        _selectedIds.length == _filteredFavorites.length ? '全选' : '全选',
+                        style: TextStyle(color: colors.accent, fontSize: 13),
+                      ),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _isSearching = !_isSearching;
-                        if (!_isSearching) {
-                          _searchController.clear();
-                          _filteredFavorites = _favorites;
-                        }
-                      });
-                    },
-                    tooltip: _isSearching ? '关闭搜索' : '搜索',
-                  ),
-                  if (!_isSearching)
+                    // 取消选择模式
                     IconButton(
-                      icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
-                      onPressed: _loadFavorites,
-                      tooltip: '刷新',
+                      icon: Icon(Icons.close, color: colors.textSecondary, size: 22),
+                      onPressed: () {
+                        setState(() {
+                          _isSelectionMode = false;
+                          _selectedIds.clear();
+                        });
+                      },
+                      tooltip: '取消',
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                     ),
+                  ] else ...[
+                    IconButton(
+                      icon: Icon(
+                        _isSearching ? Icons.close : Icons.search,
+                        color: colors.textSecondary,
+                        size: 22,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isSearching = !_isSearching;
+                          if (!_isSearching) {
+                            _searchController.clear();
+                            _filteredFavorites = _favorites;
+                          }
+                        });
+                      },
+                      tooltip: _isSearching ? '关闭搜索' : '搜索',
+                    ),
+                    if (!_isSearching)
+                      IconButton(
+                        icon: Icon(Icons.checklist_rounded, color: colors.textSecondary, size: 22),
+                        onPressed: () {
+                          setState(() {
+                            _isSelectionMode = true;
+                          });
+                        },
+                        tooltip: '多选',
+                      ),
+                    if (!_isSearching)
+                      IconButton(
+                        icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
+                        onPressed: _loadFavorites,
+                        tooltip: '刷新',
+                      ),
+                  ],
                 ],
               ),
               // 内容区域
@@ -226,8 +336,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Widget _buildFavoritesListSliver(ThemeColors colors, MusicProvider musicProvider) {
-    // 如果有正在播放的歌曲，底部留出空间给 mini 播放器
-    final bottomPadding = musicProvider.currentSong != null ? 80.0 : 16.0;
+    // 计算底部padding：mini播放器(80) + 额外间距(16)
+    final bottomPadding = musicProvider.currentSong != null ? 96.0 : 16.0;
 
     return SliverPadding(
       padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: bottomPadding),
@@ -239,7 +349,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             
             return Padding(
               padding: EdgeInsets.only(bottom: 12),
-              child: _buildSongItem(favorite, isPlaying, colors, musicProvider),
+              child: _buildSongItem(favorite, isPlaying, colors, musicProvider, _isSelectionMode),
             );
           },
           childCount: _filteredFavorites.length,
@@ -253,7 +363,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     bool isPlaying,
     ThemeColors colors,
     MusicProvider musicProvider,
+    bool isSelectionMode,
   ) {
+    final isSelected = _selectedIds.contains(favorite.id);
     return Container(
       // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
     decoration: BoxDecoration(
@@ -280,17 +392,44 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            // 使用扩展方法转换
-            final song = favorite.toSong();
-            // 🔧 修复：使用 _filteredFavorites 而不是 _favorites，确保索引匹配
-            final allSongs = _filteredFavorites.toSongList();
-            
-            musicProvider.playSong(song, playlist: allSongs);
+            if (isSelectionMode) {
+              setState(() {
+                if (isSelected) {
+                  _selectedIds.remove(favorite.id);
+                } else {
+                  _selectedIds.add(favorite.id);
+                }
+              });
+            } else {
+              // 使用扩展方法转换
+              final song = favorite.toSong();
+              // 🔧 修复：使用 _filteredFavorites 而不是 _favorites，确保索引匹配
+              final allSongs = _filteredFavorites.toSongList();
+              
+              musicProvider.playSong(song, playlist: allSongs);
+            }
           },
           child: Padding(
             padding: EdgeInsets.all(12),
             child: Row(
               children: [
+                // 选择框或封面图
+                if (isSelectionMode)
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (value) {
+                      setState(() {
+                        if (value == true) {
+                          _selectedIds.add(favorite.id);
+                        } else {
+                          _selectedIds.remove(favorite.id);
+                        }
+                      });
+                    },
+                    activeColor: colors.accent,
+                  )
+                else
+                  SizedBox(width: 0),
                 // 封面图
                 Stack(
                   children: [
@@ -376,9 +515,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                SizedBox(width: 8),
-                // 收藏按钮
-                Container(
+                if (!isSelectionMode) ...[
+                  SizedBox(width: 8),
+                  // 收藏按钮
+                  Container(
                   // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                 decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -432,7 +572,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     padding: EdgeInsets.all(8),
                     constraints: BoxConstraints(),
                   ),
-                ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -447,5 +588,123 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final minutes = twoDigits((durationSeconds ~/ 60) % 60);
     final seconds = twoDigits(durationSeconds % 60);
     return '$minutes:$seconds';
+  }
+
+  /// 批量下载
+  Future<void> _batchDownload() async {
+    final selectedSongs = _filteredFavorites
+        .where((f) => _selectedIds.contains(f.id))
+        .toList();
+
+    if (selectedSongs.isEmpty) return;
+
+    final manager = DownloadManager();
+    await manager.init();
+
+    int successCount = 0;
+    for (final favorite in selectedSongs) {
+      final song = favorite.toSong();
+      final success = await manager.addDownload(song);
+      if (success) successCount++;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已添加 $successCount 首歌曲到下载队列'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: '查看',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DownloadProgressScreen(),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// 批量移除
+  Future<void> _batchRemove() async {
+    final selectedSongs = _filteredFavorites
+        .where((f) => _selectedIds.contains(f.id))
+        .toList();
+
+    if (selectedSongs.isEmpty) return;
+
+    // 确认对话框
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final colors = Provider.of<ThemeProvider>(context).colors;
+        return AlertDialog(
+          backgroundColor: colors.surface,
+          title: Text(
+            '批量移除',
+            style: TextStyle(color: colors.textPrimary),
+          ),
+          content: Text(
+            '确定要从我喜欢中移除 ${_selectedIds.length} 首歌曲吗？',
+            style: TextStyle(color: colors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('取消', style: TextStyle(color: colors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('移除'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    int successCount = 0;
+
+    for (final favorite in selectedSongs) {
+      final success = await musicProvider.toggleFavorite(favorite.id);
+      if (success) successCount++;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+
+    // 刷新列表
+    await _loadFavorites();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已移除 $successCount 首歌曲'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.orange.shade700,
+      ),
+    );
   }
 }

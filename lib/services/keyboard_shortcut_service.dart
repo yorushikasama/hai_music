@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../utils/logger.dart';
 import '../providers/music_provider.dart';
 
 /// 键盘快捷键服务
@@ -58,6 +59,8 @@ class KeyboardShortcutService {
 
     // 获取按键
     final key = event.logicalKey;
+
+    Logger.debug('快捷键: ${event.logicalKey.keyLabel}', 'KeyboardShortcut');
 
     // ==================== 播放控制 ====================
     

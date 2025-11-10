@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/play_history.dart';
 import '../models/song.dart';
+import '../models/play_history.dart';
+import '../utils/logger.dart';
 
 /// 播放历史服务
 class PlayHistoryService {
@@ -40,7 +41,7 @@ class PlayHistoryService {
       final jsonList = historyList.map((h) => json.encode(h.toJson())).toList();
       await prefs.setStringList(_historyKey, jsonList);
     } catch (e) {
-      print('添加播放历史失败: $e');
+      Logger.error('添加播放历史失败', e, null, 'PlayHistory');
     }
   }
 
@@ -55,7 +56,7 @@ class PlayHistoryService {
         return PlayHistory.fromJson(map);
       }).toList();
     } catch (e) {
-      print('获取播放历史失败: $e');
+      Logger.error('获取播放历史失败', e, null, 'PlayHistory');
       return [];
     }
   }
@@ -66,7 +67,7 @@ class PlayHistoryService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_historyKey);
     } catch (e) {
-      print('清空播放历史失败: $e');
+      Logger.error('清空播放历史失败', e, null, 'PlayHistory');
     }
   }
 
@@ -81,7 +82,7 @@ class PlayHistoryService {
       final jsonList = historyList.map((h) => json.encode(h.toJson())).toList();
       await prefs.setStringList(_historyKey, jsonList);
     } catch (e) {
-      print('删除播放历史失败: $e');
+      Logger.error('删除播放历史失败', e, null, 'PlayHistory');
     }
   }
 }

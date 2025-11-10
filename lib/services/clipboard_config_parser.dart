@@ -1,4 +1,6 @@
+import 'dart:convert';
 import '../models/storage_config.dart';
+import '../utils/logger.dart';
 
 /// 粘贴板配置解析服务
 class ClipboardConfigParser {
@@ -61,13 +63,13 @@ class ClipboardConfigParser {
 
       // 验证必填字段
       if (supabaseUrl == null || supabaseAnonKey == null) {
-        print('❌ 缺少 Supabase 配置');
+        Logger.warning('缺少 Supabase 配置', 'ConfigParser');
         return null;
       }
 
       if (r2Endpoint == null || r2AccessKeyId == null || 
           r2SecretAccessKey == null || r2BucketName == null) {
-        print('❌ 缺少 R2 配置');
+        Logger.warning('缺少 R2 配置', 'ConfigParser');
         return null;
       }
 
@@ -85,14 +87,14 @@ class ClipboardConfigParser {
       );
 
       // 🔧 优化:移除不必要的字符串插值大括号
-      print('✅ 成功解析配置');
-      print('  Supabase URL: $supabaseUrl');
-      print('  R2 Bucket: $r2BucketName');
-      print('  R2 Custom Domain: ${r2CustomDomain ?? "未设置"}');
+      Logger.success('成功解析配置', 'ConfigParser');
+      Logger.info('  Supabase URL: $supabaseUrl', 'ConfigParser');
+      Logger.info('  R2 Bucket: $r2BucketName', 'ConfigParser');
+      Logger.info('  R2 Custom Domain: ${r2CustomDomain ?? "未设置"}', 'ConfigParser');
 
       return config;
     } catch (e) {
-      print('❌ 解析配置失败: $e');
+      Logger.error('解析配置失败', e, null, 'ConfigParser');
       return null;
     }
   }

@@ -13,6 +13,7 @@ import '../services/favorite_manager_service.dart';
 import '../services/sleep_timer_service.dart';
 import '../services/preferences_service.dart';
 import '../utils/platform_utils.dart';
+import '../utils/logger.dart';
 import '../config/app_constants.dart';
 
 class MusicProvider with ChangeNotifier {
@@ -72,7 +73,7 @@ class MusicProvider with ChangeNotifier {
   /// 生产环境可通过 _enableDebugLog 开关关闭
   void _log(String message) {
     if (_enableDebugLog) {
-      print(message);
+      Logger.player(message, 'MusicProvider');
     }
   }
 
@@ -186,8 +187,7 @@ class MusicProvider with ChangeNotifier {
         }
       }));
     } catch (e, stackTrace) {
-      print('❌ AudioService 初始化失败: $e');
-      print('❌ 堆栈跟踪: $stackTrace');
+      Logger.error('AudioService 初始化失败', e, stackTrace, 'MusicProvider');
       _audioHandlerInitialized = false;
     }
   }
@@ -245,8 +245,10 @@ class MusicProvider with ChangeNotifier {
 
   /// 获取歌曲播放URL（带缓存）
   Future<String?> _getSongUrl(Song song) async {
-    // 优先使用直链
-    if (song.audioUrl.isNotEmpty && song.audioUrl.startsWith('http')) {
+    // 优先使用直链（包括本地文件 file:// 和网络链接 http(s)://）
+    if (song.audioUrl.isNotEmpty && 
+        (song.audioUrl.startsWith('http') || song.audioUrl.startsWith('file://'))) {
+      Logger.player('使用直链: ${song.audioUrl}', 'MusicProvider');
       return song.audioUrl;
     }
 
@@ -309,6 +311,7 @@ class MusicProvider with ChangeNotifier {
       album: song.album,
       coverUrl: song.coverUrl,
       r2CoverUrl: song.r2CoverUrl,
+      platform: song.platform,
       audioUrl: url,
       duration: song.duration,
       lyricsLrc: song.lyricsLrc,
@@ -381,6 +384,12 @@ class MusicProvider with ChangeNotifier {
 
   /// 从 MediaItem 更新当前歌曲
   void _updateCurrentSongFromMediaItem(MediaItem item) {
+    // 🔧 关键修复：如果当前歌曲ID已经匹配，不需要更新
+    // 这样可以避免 mediaItem 监听器覆盖刚刚设置的 _currentSong
+    if (_currentSong?.id == item.id) {
+      return;
+    }
+    
     // 从播放列表中找到对应的歌曲
     final song = _playlist.firstWhere(
       (s) => s.id == item.id,
@@ -396,11 +405,9 @@ class MusicProvider with ChangeNotifier {
       ),
     );
     
-    if (_currentSong?.id != song.id) {
-      _currentSong = song;
-      _currentIndex = _playlist.indexWhere((s) => s.id == song.id);
-      notifyListeners();
-    }
+    _currentSong = song;
+    _currentIndex = _playlist.indexWhere((s) => s.id == song.id);
+    notifyListeners();
   }
 
   // 初始化收藏管理服务
@@ -510,12 +517,16 @@ class MusicProvider with ChangeNotifier {
     final currentVersion = _playRequestVersion;
 
     _isLoading = true;
+    
+    // 🔧 优化:使用提取的公共方法设置播放列表
+    _setupPlaylist(song, playlist);
+    
+    // 🔧 立即更新当前歌曲（即使还没有 URL），确保 UI 能立即显示正确的歌曲信息
+    _currentSong = song;
+    _playlist[_currentIndex] = song;  // 同时更新播放列表
     notifyListeners();
 
     try {
-      // 🔧 优化:使用提取的公共方法设置播放列表
-      _setupPlaylist(song, playlist);
-
       // 获取当前歌曲的播放链接（使用缓存）
       final audioUrl = await _getSongUrl(song);
 
@@ -524,15 +535,15 @@ class MusicProvider with ChangeNotifier {
       }
 
       if (audioUrl == null || audioUrl.isEmpty) {
-        print('❌ 获取播放链接失败: ${song.title}');
+        Logger.error('获取播放链接失败: ${song.title}', null, null, 'MusicProvider');
         _consecutiveFailures++;
         
         // 🔧 修复：只在自动播放时才自动跳过，用户主动点击时不跳过
         if (autoSkipOnError && _consecutiveFailures < AppConstants.maxConsecutiveFailures) {
-          print('⏭️ [MusicProvider] 自动跳过失败歌曲,尝试下一首 (自动播放模式)');
+          Logger.player('自动跳过失败歌曲,尝试下一首 (自动播放模式)', 'MusicProvider');
           Future.delayed(const Duration(milliseconds: 500), () => playNext(autoSkip: true));
         } else {
-          print('⚠️ [MusicProvider] 播放失败，停止播放（用户主动点击）');
+          Logger.warning('播放失败，停止播放（用户主动点击）', 'MusicProvider');
           _isLoading = false;
           notifyListeners();
         }
@@ -551,7 +562,7 @@ class MusicProvider with ChangeNotifier {
 
       // 🔧 修复：在停止播放之前检查版本号，避免影响新的播放请求
       if (currentVersion != _playRequestVersion) {
-        print('⚠️ [MusicProvider] 播放请求已过期（停止前），取消操作');
+        Logger.warning('播放请求已过期（停止前），取消操作', 'MusicProvider');
         return;
       }
 
@@ -560,11 +571,21 @@ class MusicProvider with ChangeNotifier {
       
       // 🔧 修复：在调用 play() 之前再次检查版本号，防止快速切歌时播放旧歌曲
       if (currentVersion != _playRequestVersion) {
-        print('⚠️ [MusicProvider] 播放请求已过期（播放前），取消播放');
+        Logger.warning('播放请求已过期（播放前），取消播放', 'MusicProvider');
         return;
       }
       
-      await _audioPlayer!.play(UrlSource(_currentSong!.audioUrl));
+      // 根据 URL 类型选择合适的 Source
+      if (_currentSong!.audioUrl.startsWith('file://')) {
+        // 本地文件：移除 file:// 前缀，使用 DeviceFileSource
+        final filePath = _currentSong!.audioUrl.replaceFirst('file:///', '');
+        Logger.player('播放本地文件: $filePath', 'MusicProvider');
+        await _audioPlayer!.play(DeviceFileSource(filePath));
+      } else {
+        // 网络 URL：使用 UrlSource
+        Logger.player('播放网络URL: ${_currentSong!.audioUrl}', 'MusicProvider');
+        await _audioPlayer!.play(UrlSource(_currentSong!.audioUrl));
+      }
       
       _consecutiveFailures = 0;
       _historyService.addHistory(_currentSong!);
@@ -572,7 +593,7 @@ class MusicProvider with ChangeNotifier {
       // 预加载下一首歌曲
       _preloadNextSong();
     } catch (e) {
-      print('❌ 播放出错: $e');
+      Logger.error('播放出错', e, null, 'MusicProvider');
       _consecutiveFailures++;
       
       if (autoSkipOnError && currentVersion == _playRequestVersion && 
@@ -602,12 +623,16 @@ class MusicProvider with ChangeNotifier {
     final currentVersion = _playRequestVersion;
 
     _isLoading = true;
+    
+    // 设置播放列表
+    _setupPlaylist(song, playlist);
+    
+    // 🔧 立即更新当前歌曲（即使还没有 URL），确保 UI 能立即显示正确的歌曲信息
+    _currentSong = song;
+    _playlist[_currentIndex] = song;  // 同时更新播放列表
     notifyListeners();
 
     try {
-      // 设置播放列表
-      _setupPlaylist(song, playlist);
-
       // 获取播放链接
       final audioUrl = await _getSongUrl(song);
 
@@ -630,7 +655,7 @@ class MusicProvider with ChangeNotifier {
         return;
       }
 
-      // 更新当前歌曲
+      // 更新当前歌曲（带URL）
       _currentSong = _createSongWithUrl(song, audioUrl);
       _playlist[_currentIndex] = _currentSong!;
       
@@ -831,7 +856,15 @@ class MusicProvider with ChangeNotifier {
       if (PlatformUtils.isWindows) {
         await _audioPlayer!.stop();
         if (currentVersion != _playRequestVersion) return;
-        await _audioPlayer!.play(UrlSource(_currentSong!.audioUrl));
+        // 根据 URL 类型选择合适的 Source
+        if (_currentSong!.audioUrl.startsWith('file://')) {
+          // 本地文件：移除 file:// 前缀，使用 DeviceFileSource
+          final filePath = _currentSong!.audioUrl.replaceFirst('file:///', '');
+          await _audioPlayer!.play(DeviceFileSource(filePath));
+        } else {
+          // 网络 URL：使用 UrlSource
+          await _audioPlayer!.play(UrlSource(_currentSong!.audioUrl));
+        }
       } else {
         await _audioHandler!.playSingleSong(_currentSong!, displayQueue: _playlist);
       }
@@ -1017,7 +1050,7 @@ class MusicProvider with ChangeNotifier {
   Future<bool> toggleFavorite(String songId) async {
     // 防止重复点击
     if (_favoriteOperationInProgress.contains(songId)) {
-      print('⚠️ 收藏操作正在进行中，请稍候...');
+      Logger.warning('收藏操作正在进行中，请稍候...', 'MusicProvider');
       return false;
     }
 
@@ -1028,25 +1061,25 @@ class MusicProvider with ChangeNotifier {
     try {
       if (_favoriteSongIds.contains(songId)) {
         // 取消收藏
-        print('📤 取消收藏: $songId');
+        Logger.info('取消收藏: $songId', 'MusicProvider');
         _favoriteSongIds.remove(songId);
         notifyListeners(); // 立即更新 UI
         
         final success = await _favoriteManager.removeFavorite(songId);
         if (success) {
           await _prefs.setFavoriteSongs(_favoriteSongIds.toList());
-          print('✅ 取消收藏成功');
+          Logger.success('取消收藏成功', 'MusicProvider');
           return true;
         } else {
           // 失败时回滚
           _favoriteSongIds.add(songId);
           notifyListeners();
-          print('❌ 取消收藏失败');
+          Logger.error('取消收藏失败', null, null, 'MusicProvider');
           return false;
         }
       } else {
         // 添加收藏
-        print('💖 添加收藏: $songId');
+        Logger.info('添加收藏: $songId', 'MusicProvider');
         
         // 查找歌曲对象
         Song? song;
@@ -1056,12 +1089,12 @@ class MusicProvider with ChangeNotifier {
           try {
             song = _playlist.firstWhere((s) => s.id == songId);
           } catch (e) {
-            print('❌ 在播放列表中找不到歌曲: $songId');
+            Logger.error('在播放列表中找不到歌曲: $songId', null, null, 'MusicProvider');
           }
         }
         
         if (song == null) {
-          print('❌ 无法找到歌曲对象，无法添加收藏');
+          Logger.error('无法找到歌曲对象，无法添加收藏', null, null, 'MusicProvider');
           return false;
         }
         
@@ -1069,25 +1102,25 @@ class MusicProvider with ChangeNotifier {
         notifyListeners(); // 立即更新 UI
         
         // 传递当前播放音质
-        print('💾 使用当前播放音质下载: ${_audioQuality.value}');
+        Logger.info('使用当前播放音质下载: ${_audioQuality.value}', 'MusicProvider');
         final success = await _favoriteManager.addFavorite(
           song,
           audioQuality: _audioQuality.value, // 使用当前播放音质
         );
         if (success) {
           await _prefs.setFavoriteSongs(_favoriteSongIds.toList());
-          print('✅ 添加收藏成功: ${song.title}');
+          Logger.success('添加收藏成功: ${song.title}', 'MusicProvider');
           return true;
         } else {
           // 失败时回滚
           _favoriteSongIds.remove(songId);
           notifyListeners();
-          print('❌ 添加收藏失败');
+          Logger.error('添加收藏失败', null, null, 'MusicProvider');
           return false;
         }
       }
     } catch (e) {
-      print('❌ 切换收藏状态出错: $e');
+      Logger.error('切换收藏状态出错', e, null, 'MusicProvider');
       // 出错时回滚状态
       if (_favoriteSongIds.contains(songId)) {
         _favoriteSongIds.remove(songId);
@@ -1118,13 +1151,13 @@ class MusicProvider with ChangeNotifier {
   /// 🔧 优化:内存使用监控
   /// 用于调试和性能分析
   void logMemoryUsage() {
-    print('📊 [内存监控] ==================');
-    print('📊 [内存] URL缓存: ${_urlCache.length}/$_maxUrlCacheSize');
-    print('📊 [内存] 播放列表: ${_playlist.length} 首歌曲');
-    print('📊 [内存] 收藏歌曲: ${_favoriteSongIds.length} 首');
-    print('📊 [内存] 随机队列: ${_shuffleQueue.length} 个索引');
-    print('📊 [内存] 正在处理的收藏操作: ${_favoriteOperationInProgress.length}');
-    print('📊 [内存监控] ==================');
+    Logger.debug('==================', 'MemoryMonitor');
+    Logger.debug('URL缓存: ${_urlCache.length}/$_maxUrlCacheSize', 'MemoryMonitor');
+    Logger.debug('播放列表: ${_playlist.length} 首歌曲', 'MemoryMonitor');
+    Logger.debug('收藏歌曲: ${_favoriteSongIds.length} 首', 'MemoryMonitor');
+    Logger.debug('随机队列: ${_shuffleQueue.length} 个索引', 'MemoryMonitor');
+    Logger.debug('正在处理的收藏操作: ${_favoriteOperationInProgress.length}', 'MemoryMonitor');
+    Logger.debug('==================', 'MemoryMonitor');
   }
 
   /// 🔧 优化:清理过期的URL缓存
@@ -1145,7 +1178,7 @@ class MusicProvider with ChangeNotifier {
     }
 
     if (expiredKeys.isNotEmpty) {
-      print('🗑️ [缓存清理] 已清理 ${expiredKeys.length} 个过期URL缓存');
+      Logger.info('已清理 ${expiredKeys.length} 个过期URL缓存', 'CacheCleanup');
     }
   }
 
@@ -1154,7 +1187,7 @@ class MusicProvider with ChangeNotifier {
     final count = _urlCache.length;
     _urlCache.clear();
     _urlCacheTimestamp.clear();
-    print('🗑️ [缓存清理] 已清空所有URL缓存 ($count 个)');
+    Logger.info('已清空所有URL缓存 ($count 个)', 'CacheCleanup');
   }
 
   @override

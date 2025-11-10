@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 
@@ -155,7 +156,7 @@ class DebugLogger {
     logs.value = currentLogs;
     
     // 同时输出到控制台
-    print(logMessage);
+    Logger.debug(logMessage);
   }
 
   /// 清空日志

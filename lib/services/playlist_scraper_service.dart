@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../utils/logger.dart';
 
 /// 推荐歌单数据模型
 class RecommendedPlaylist {
@@ -24,7 +25,7 @@ class PlaylistScraperService {
   /// 获取QQ音乐首页推荐歌单
   Future<List<RecommendedPlaylist>> fetchRecommendedPlaylists() async {
     try {
-      print('[PlaylistScraper] 开始请求 QQ音乐首页...');
+      Logger.network('开始请求 QQ音乐首页...', 'PlaylistScraper');
       final url = Uri.parse('https://y.qq.com/');
       final response = await http.get(
         url,
@@ -35,15 +36,15 @@ class PlaylistScraperService {
         },
       );
       
-      print('[PlaylistScraper] 响应状态码: ${response.statusCode}');
+      Logger.network('响应状态码: ${response.statusCode}', 'PlaylistScraper');
       
       if (response.statusCode != 200) {
-        print('[PlaylistScraper] 请求失败,状态码: ${response.statusCode}');
+        Logger.warning('请求失败,状态码: ${response.statusCode}', 'PlaylistScraper');
         return [];
       }
       
       final htmlContent = utf8.decode(response.bodyBytes);
-      print('[PlaylistScraper] HTML 内容长度: ${htmlContent.length}');
+      Logger.debug('HTML 内容长度: ${htmlContent.length}', 'PlaylistScraper');
       
       final playlists = <RecommendedPlaylist>[];
       
@@ -54,7 +55,7 @@ class PlaylistScraperService {
       );
       
       final matches = playlistDataRegex.allMatches(htmlContent);
-      print('[PlaylistScraper] 找到 ${matches.length} 个匹配项');
+      Logger.debug('找到 ${matches.length} 个匹配项', 'PlaylistScraper');
       
       for (final match in matches) {
         try {
@@ -84,10 +85,10 @@ class PlaylistScraperService {
         }
       }
       
-      print('[PlaylistScraper] 成功解析 ${playlists.length} 个歌单');
+      Logger.success('成功解析 ${playlists.length} 个歌单', 'PlaylistScraper');
       return playlists;
     } catch (e) {
-      print('[PlaylistScraper] 错误: $e');
+      Logger.error('解析歌单失败', e, null, 'PlaylistScraper');
       return [];
     }
   }

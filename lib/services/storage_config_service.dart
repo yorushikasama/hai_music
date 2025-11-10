@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/storage_config.dart';
+import '../utils/logger.dart';
 
 /// 存储配置服务
 class StorageConfigService {
@@ -28,7 +29,7 @@ class StorageConfigService {
       final jsonStr = jsonEncode(config.toJson());
       return await _prefs.setString(_configKey, jsonStr);
     } catch (e) {
-      print('保存存储配置失败: $e');
+      Logger.error('保存配置失败', e, null, 'StorageConfig');
       return false;
     }
   }
@@ -43,7 +44,7 @@ class StorageConfigService {
       final json = jsonDecode(jsonStr);
       return StorageConfig.fromJson(json);
     } catch (e) {
-      print('读取存储配置失败: $e');
+      Logger.error('读取配置失败', e, null, 'StorageConfig');
       return StorageConfig.empty();
     }
   }
