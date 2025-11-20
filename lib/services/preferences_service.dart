@@ -151,6 +151,23 @@ class PreferencesService {
     return getFavorites();
   }
 
+  // ==================== 上次播放会话 ====================
+  
+  /// 保存上次播放会话（JSON 字符串）
+  Future<bool> setLastSession(String sessionJson) async {
+    return await _prefs.setString('last_session', sessionJson);
+  }
+
+  /// 获取上次播放会话（JSON 字符串）
+  String getLastSession() {
+    return _prefs.getString('last_session') ?? '';
+  }
+
+  /// 清除上次播放会话
+  Future<bool> clearLastSession() async {
+    return await _prefs.remove('last_session');
+  }
+
   // ==================== 清除所有数据 ====================
   
   /// 清除所有数据

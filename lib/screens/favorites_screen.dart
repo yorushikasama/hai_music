@@ -43,18 +43,20 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   void _filterFavorites(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredFavorites = _favorites;
-      } else {
-        _filteredFavorites = _favorites.where((song) {
-          final titleMatch = song.title.toLowerCase().contains(query.toLowerCase());
-          final artistMatch = song.artist.toLowerCase().contains(query.toLowerCase());
-          final albumMatch = song.album.toLowerCase().contains(query.toLowerCase());
-          return titleMatch || artistMatch || albumMatch;
-        }).toList();
-      }
-    });
+    if (mounted) {
+      setState(() {
+        if (query.isEmpty) {
+          _filteredFavorites = _favorites;
+        } else {
+          _filteredFavorites = _favorites.where((song) {
+            final titleMatch = song.title.toLowerCase().contains(query.toLowerCase());
+            final artistMatch = song.artist.toLowerCase().contains(query.toLowerCase());
+            final albumMatch = song.album.toLowerCase().contains(query.toLowerCase());
+            return titleMatch || artistMatch || albumMatch;
+          }).toList();
+        }
+      });
+    }
   }
 
   Future<void> _loadFavorites() async {

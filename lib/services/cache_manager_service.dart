@@ -72,13 +72,20 @@ class CacheManagerService {
   Future<int> getAudioCacheSize() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final audioDir = Directory('${dir.path}/music/audio');
+      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
 
-      if (!await audioDir.exists()) {
+      if (!await downloadDir.exists()) {
         return 0;
       }
 
-      return await _calculateDirectorySize(audioDir);
+      // 计算音频文件大小 (.mp3 文件)
+      int totalSize = 0;
+      await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
+        if (entity is File && entity.path.endsWith('.mp3')) {
+          totalSize += await entity.length();
+        }
+      }
+      return totalSize;
     } catch (e) {
       Logger.error('获取音频缓存大小失败', e, null, 'CacheManager');
       return 0;
@@ -89,38 +96,35 @@ class CacheManagerService {
   Future<int> getCoverCacheSize() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final coverDir = Directory('${dir.path}/music/covers');
+      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
 
-      if (!await coverDir.exists()) {
+      if (!await downloadDir.exists()) {
         return 0;
       }
 
-      return await _calculateDirectorySize(coverDir);
+      // 计算封面文件大小 (.jpg 文件)
+      int totalSize = 0;
+      await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
+        if (entity is File && entity.path.endsWith('.jpg')) {
+          totalSize += await entity.length();
+        }
+      }
+      return totalSize;
     } catch (e) {
       Logger.error('获取封面缓存大小失败', e, null, 'CacheManager');
       return 0;
     }
   }
 
-  /// 计算目录大小
-  Future<int> _calculateDirectorySize(Directory dir) async {
-    int totalSize = 0;
-    await for (var entity in dir.list(recursive: true, followLinks: false)) {
-      if (entity is File) {
-        totalSize += await entity.length();
-      }
-    }
-    return totalSize;
-  }
 
   /// 清理所有缓存
   Future<bool> clearAllCache() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final musicDir = Directory('${dir.path}/music');
+      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
 
-      if (await musicDir.exists()) {
-        await musicDir.delete(recursive: true);
+      if (await downloadDir.exists()) {
+        await downloadDir.delete(recursive: true);
         Logger.success('缓存清理完成', 'CacheManager');
 
         // 清除缓存信息
@@ -140,10 +144,15 @@ class CacheManagerService {
   Future<bool> clearAudioCache() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final audioDir = Directory('${dir.path}/music/audio');
+      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
 
-      if (await audioDir.exists()) {
-        await audioDir.delete(recursive: true);
+      if (await downloadDir.exists()) {
+        // 只删除音频文件 (.mp3)
+        await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
+          if (entity is File && entity.path.endsWith('.mp3')) {
+            await entity.delete();
+          }
+        }
         Logger.success('音频缓存清理完成', 'CacheManager');
 
         // 清除缓存信息
@@ -163,10 +172,15 @@ class CacheManagerService {
   Future<bool> clearCoverCache() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final coverDir = Directory('${dir.path}/music/covers');
+      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
 
-      if (await coverDir.exists()) {
-        await coverDir.delete(recursive: true);
+      if (await downloadDir.exists()) {
+        // 只删除封面文件 (.jpg)
+        await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
+          if (entity is File && entity.path.endsWith('.jpg')) {
+            await entity.delete();
+          }
+        }
         Logger.success('封面缓存清理完成', 'CacheManager');
 
         // 清除缓存信息

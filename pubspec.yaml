@@ -14,24 +14,30 @@ dependencies:
   google_fonts: ^6.2.1
   animations: ^2.0.11
   shimmer: ^3.0.0
+  # 桌面端依赖
   bitsdojo_window: ^0.1.6
   flutter_acrylic: ^1.1.4
-  http: ^1.1.0
+  # 音频播放 - 桌面端使用 audioplayers，移动端使用 just_audio
   audioplayers: ^5.2.1
   just_audio: ^0.9.36
   just_audio_windows: ^0.2.0
   audio_service: ^0.18.12
-  flutter_lyric: ^2.0.4+6
+  # 网络请求 - 统一使用 dio
   dio: ^5.4.0
+  # UI 组件
+  flutter_lyric: ^2.0.4+6
   cached_network_image: ^3.3.1
+  # 数据存储
   shared_preferences: ^2.2.2
-  html: ^0.15.4
   supabase_flutter: ^2.3.4
   minio: ^3.5.8
   path_provider: ^2.1.2
   path: ^1.8.3
+  # 本地音频
   on_audio_query: ^2.9.0
   audio_metadata_reader: ^1.4.2
+  # 工具库
+  html: ^0.15.4
 
 dev_dependencies:
   flutter_test:

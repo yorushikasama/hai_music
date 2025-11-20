@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/logger.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../models/song.dart';
 import '../providers/music_provider.dart';
@@ -14,6 +13,8 @@ import '../services/music_api_service.dart';
 import '../services/preferences_cache_service.dart';
 import '../services/download_manager.dart';
 import 'download_progress_screen.dart';
+import 'search/search_header.dart';
+import 'search/search_results.dart';
 
 class SearchScreen extends StatefulWidget {
   final String? initialQuery;
@@ -102,9 +103,11 @@ class _SearchScreenState extends State<SearchScreen> {
       final prefsCache = PreferencesCacheService();
       await prefsCache.init();
       final history = await prefsCache.getStringList(_historyKey) ?? [];
-      setState(() {
-        _searchHistory = history;
-      });
+      if (mounted) {
+        setState(() {
+          _searchHistory = history;
+        });
+      }
     } catch (e) {
       // 忽略错误
     }
@@ -128,7 +131,9 @@ class _SearchScreenState extends State<SearchScreen> {
       }
 
       await prefsCache.setStringList(_historyKey, _searchHistory);
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     } catch (e) {
       // 忽略错误
     }
@@ -140,9 +145,11 @@ class _SearchScreenState extends State<SearchScreen> {
       final prefsCache = PreferencesCacheService();
       await prefsCache.init();
       await prefsCache.remove(_historyKey);
-      setState(() {
-        _searchHistory = [];
-      });
+      if (mounted) {
+        setState(() {
+          _searchHistory = [];
+        });
+      }
     } catch (e) {
       // 忽略错误
     }
@@ -276,167 +283,42 @@ class _SearchScreenState extends State<SearchScreen> {
             child: SafeArea(
               child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              _isSelectionMode ? Icons.checklist_rounded : Icons.search,
-                              color: _isSelectionMode ? colors.accent : colors.textPrimary,
-                              size: 32,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _isSelectionMode ? '选择歌曲' : '搜索',
-                                    style: TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      color: colors.textPrimary,
-                                    ),
-                                  ),
-                                  if (_isSelectionMode && _selectedIds.isNotEmpty)
-                                    Text(
-                                      '已选择 ${_selectedIds.length} 首',
-                                      style: TextStyle(
-                                        color: colors.accent,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            if (_searchResults.isNotEmpty && !_isSelectionMode)
-                              IconButton(
-                                icon: Icon(Icons.checklist_rounded, color: colors.textSecondary, size: 24),
-                                onPressed: () {
-                                  setState(() {
-                                    _isSelectionMode = true;
-                                  });
-                                },
-                                tooltip: '多选',
-                              ),
-                            if (_isSelectionMode) ...[
-                              if (_selectedIds.isNotEmpty)
-                                PopupMenuButton<String>(
-                                  icon: Icon(Icons.more_vert, color: colors.textSecondary, size: 22),
-                                  color: colors.surface,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  offset: const Offset(0, 50),
-                                  itemBuilder: (context) => [
-                                    PopupMenuItem<String>(
-                                      value: 'favorite',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.favorite_border, color: colors.accent, size: 20),
-                                          const SizedBox(width: 12),
-                                          Text('批量喜欢', style: TextStyle(color: colors.textPrimary)),
-                                        ],
-                                      ),
-                                    ),
-                                    PopupMenuItem<String>(
-                                      value: 'download',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.download_outlined, color: colors.accent, size: 20),
-                                          const SizedBox(width: 12),
-                                          Text('批量下载', style: TextStyle(color: colors.textPrimary)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  onSelected: (value) {
-                                    if (value == 'favorite') {
-                                      _batchAddToFavorites();
-                                    } else if (value == 'download') {
-                                      _batchDownload();
-                                    }
-                                  },
-                                ),
-                              TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    if (_selectedIds.length == _searchResults.length) {
-                                      _selectedIds.clear();
-                                    } else {
-                                      _selectedIds.addAll(_searchResults.map((s) => s.id));
-                                    }
-                                  });
-                                },
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  minimumSize: const Size(0, 36),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: Text(
-                                  _selectedIds.length == _searchResults.length ? '全选' : '全选',
-                                  style: TextStyle(color: colors.accent, fontSize: 13),
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.close, color: colors.textSecondary, size: 22),
-                                onPressed: () {
-                                  setState(() {
-                                    _isSelectionMode = false;
-                                    _selectedIds.clear();
-                                  });
-                                },
-                                tooltip: '取消',
-                                padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                              ),
-                            ],
-                          ],
-                        ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _searchController,
-                    onChanged: _onSearchChanged,
-                    onSubmitted: _performSearch,
-                    style: TextStyle(color: colors.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: '搜索歌曲、歌手、专辑...',
-                      hintStyle: TextStyle(color: colors.textSecondary),
-                      prefixIcon: Icon(Icons.search, color: colors.textSecondary),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(Icons.clear, color: colors.textSecondary),
-                              onPressed: () {
-                                _searchController.clear();
-                                _onSearchChanged('');
-                                setState(() {});
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: colors.card,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                    ),
+                  SearchHeader(
+                    isSelectionMode: _isSelectionMode,
+                    selectedCount: _selectedIds.length,
+                    totalCount: _searchResults.length,
+                    hasSearchResults: _searchResults.isNotEmpty,
+                    searchController: _searchController,
+                    onSearchChanged: _onSearchChanged,
+                    onSearchSubmitted: _performSearch,
+                    onEnterSelectionMode: () {
+                      setState(() {
+                        _isSelectionMode = true;
+                      });
+                    },
+                    onCancelSelectionMode: () {
+                      setState(() {
+                        _isSelectionMode = false;
+                        _selectedIds.clear();
+                      });
+                    },
+                    onToggleSelectAll: () {
+                      setState(() {
+                        if (_selectedIds.length == _searchResults.length) {
+                          _selectedIds.clear();
+                        } else {
+                          _selectedIds.addAll(_searchResults.map((s) => s.id));
+                        }
+                      });
+                    },
+                    onBatchAddFavorites: _batchAddToFavorites,
+                    onBatchDownload: _batchDownload,
+                  ),
+                  Expanded(
+                    child: _buildContent(colors),
                   ),
                 ],
               ),
-            ),
-            Expanded(
-              child: _buildContent(colors),
-            ),
-          ],
-        ),
             ),
           ),
         ],
@@ -476,8 +358,29 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       );
     }
-
-    return _buildSearchResults(colors);
+    return SearchResultsList(
+      songs: _searchResults,
+      isSelectionMode: _isSelectionMode,
+      selectedIds: _selectedIds,
+      isLoadingMore: _isLoadingMore,
+      hasMore: _hasMore,
+      scrollController: _scrollController,
+      onSelectionChanged: (song, selected) {
+        setState(() {
+          if (selected) {
+            _selectedIds.add(song.id);
+          } else {
+            _selectedIds.remove(song.id);
+          }
+        });
+      },
+      onSongTap: (song) {
+        Provider.of<MusicProvider>(context, listen: false)
+            .playSong(song, playlist: _searchResults);
+      },
+      onLoadMore: _loadMore,
+      onMenuAction: (ctx, action, song) => _handleMenuAction(ctx, action, song),
+    );
   }
 
   Widget _buildSearchSuggestions(ThemeColors colors) {
@@ -583,209 +486,6 @@ class _SearchScreenState extends State<SearchScreen> {
               ],
             ),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSearchResults(ThemeColors colors) {
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: _searchResults.length + (_isLoadingMore || _hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        // 加载更多指示器
-        if (index == _searchResults.length) {
-          if (_isLoadingMore) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      '加载中...',
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          } else if (_hasMore) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: TextButton(
-                  onPressed: _loadMore,
-                  child: Text(
-                    '加载更多',
-                    style: TextStyle(color: colors.primary),
-                  ),
-                ),
-              ),
-            );
-          } else {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Text(
-                  '已加载全部结果',
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            );
-          }
-        }
-        
-        final song = _searchResults[index];
-        final isSelected = _selectedIds.contains(song.id);
-        
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: _isSelectionMode
-              ? Checkbox(
-                  value: isSelected,
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == true) {
-                        _selectedIds.add(song.id);
-                      } else {
-                        _selectedIds.remove(song.id);
-                      }
-                    });
-                  },
-                  activeColor: colors.accent,
-                )
-              : ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: CachedNetworkImage(
-              imageUrl: song.coverUrl,
-              width: 56,
-              height: 56,
-              fit: BoxFit.cover,
-              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
-              placeholder: (context, url) => Container(
-                width: 56,
-                height: 56,
-                color: colors.card.withValues(alpha: 0.5),
-              ),
-              errorWidget: (context, url, error) => Container(
-                width: 56,
-                height: 56,
-                color: colors.card,
-                child: Icon(Icons.music_note, color: colors.textSecondary),
-              ),
-            ),
-          ),
-          title: Text(
-            song.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: colors.textPrimary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            '${song.artist} · ${song.album}',
-            style: TextStyle(
-              fontSize: 14,
-              color: colors.textSecondary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: _isSelectionMode
-              ? null
-              : PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: colors.textSecondary),
-            color: colors.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            offset: const Offset(0, 40),
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
-                value: 'favorite',
-                child: Consumer<MusicProvider>(
-                  builder: (context, musicProvider, child) {
-                    final isFavorite = musicProvider.isFavorite(song.id);
-                    return Row(
-                      children: [
-                        Icon(
-                          isFavorite ? Icons.favorite : Icons.favorite_border,
-                          color: isFavorite ? Colors.red : colors.textPrimary,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          isFavorite ? '取消喜欢' : '加入喜欢',
-                          style: TextStyle(color: colors.textPrimary),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'download',
-                child: Row(
-                  children: [
-                    Icon(Icons.download_outlined, color: colors.textPrimary, size: 20),
-                    const SizedBox(width: 12),
-                    Text(
-                      '下载到本地',
-                      style: TextStyle(color: colors.textPrimary),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'play',
-                child: Row(
-                  children: [
-                    Icon(Icons.play_arrow, color: colors.textPrimary, size: 20),
-                    const SizedBox(width: 12),
-                    Text(
-                      '播放',
-                      style: TextStyle(color: colors.textPrimary),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            onSelected: (value) => _handleMenuAction(context, value, song),
-          ),
-          onTap: () {
-            if (_isSelectionMode) {
-              setState(() {
-                if (isSelected) {
-                  _selectedIds.remove(song.id);
-                } else {
-                  _selectedIds.add(song.id);
-                }
-              });
-            } else {
-              Provider.of<MusicProvider>(context, listen: false)
-                  .playSong(song, playlist: _searchResults);
-            }
-          },
         );
       },
     );

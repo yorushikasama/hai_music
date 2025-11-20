@@ -65,7 +65,7 @@ class AudioQualitySelector extends StatelessWidget {
             itemCount: AudioQuality.recommended.length,
             itemBuilder: (context, index) {
               final quality = AudioQuality.recommended[index];
-              final isSelected = quality == currentQuality;
+              final isSelected = quality.name == currentQuality;
 
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(
@@ -138,7 +138,7 @@ class AudioQualitySelector extends StatelessWidget {
                         color: colors.textSecondary,
                       ),
                 onTap: () {
-                  musicProvider.setAudioQuality(quality);
+                  musicProvider.setAudioQuality(quality.value.toString());
                   Navigator.pop(context);
                   
                   // 显示提示

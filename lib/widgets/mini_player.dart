@@ -331,7 +331,7 @@ class MiniPlayer extends StatelessWidget {
           icon: const Icon(Icons.high_quality),
           iconSize: 20,
           color: colors.textSecondary,
-          tooltip: '音质: ${musicProvider.audioQuality.label}',
+          tooltip: '音质: ${musicProvider.audioQuality}',
           onPressed: () {
             showModalBottomSheet(
               context: context,

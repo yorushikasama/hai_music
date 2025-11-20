@@ -5,18 +5,17 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/song.dart';
 import '../models/playlist.dart';
-import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
 import '../utils/responsive.dart';
 import '../utils/platform_utils.dart';
-import '../widgets/theme_selector.dart';
-import '../widgets/draggable_window_area.dart';
 import '../services/music_api_service.dart';
 import '../services/playlist_scraper_service.dart';
 import '../services/data_cache_service.dart';
 import '../utils/logger.dart';
 import 'playlist_detail_screen.dart';
+import 'discover/discover_header.dart';
+import 'discover/daily_recommendations_section.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -248,12 +247,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
     final playlists = Playlist.getMockData();
 
     final isWeb = PlatformUtils.isWeb;
-    final isDesktop = Responsive.isDesktop(context);
-    final padding = Responsive.getHorizontalPadding(context);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -264,56 +260,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ),
           child: CustomScrollView(
             slivers: [
-              SliverAppBar(
-                floating: true,
-                pinned: false,
-                expandedHeight: 100,
-                backgroundColor: Colors.transparent,
-                flexibleSpace: Stack(
-                  children: [
-                    FlexibleSpaceBar(
-                      title: Text(
-                        'Hai Music',
-                        style: Theme.of(context).textTheme.headlineLarge!,
-                      ),
-                      titlePadding: EdgeInsets.only(left: padding.left, bottom: 16),
-                    ),
-                    // 桌面端拖动区域
-                    if (PlatformUtils.isDesktop)
-                      const Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: 40,
-                        child: DraggableWindowBar(),
-                      ),
-                  ],
-                ),
-                actions: !isDesktop ? [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: IconButton(
-                      icon: Text(
-                        themeProvider.getThemeIcon(themeProvider.currentTheme),
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                      onPressed: () {
-                        showModalBottomSheet(
-                          context: context,
-                          backgroundColor: Colors.transparent,
-                          builder: (context) => const ThemeSelector(),
-                        );
-                      },
-                    ),
-                  ),
-                ] : null,
-              ),
+              const DiscoverHeader(),
               SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 16),
-                    _buildDailyRecommendations(context),
+                    DailyRecommendationsSection(
+                      dailyRecommendations: _dailyRecommendations,
+                      isLoading: _isLoading,
+                      scrollController: _dailyScrollController,
+                      onRefresh: () => _loadDailyRecommendations(forceRefresh: true),
+                    ),
                     const SizedBox(height: 32),
                     _buildRecommendedPlaylists(context, playlists),
                     const SizedBox(height: 100),
@@ -326,199 +284,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       ),
     );
   }
-
-  Widget _buildDailyRecommendations(BuildContext context) {
-    final padding = Responsive.getHorizontalPadding(context);
-    final colors = Provider.of<ThemeProvider>(context).colors;
-    final today = DateTime.now();
-    final dateStr = '${today.month}月${today.day}日';
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: padding,
-          child: Row(
-            children: [
-              Icon(
-                Icons.calendar_today,
-                size: 24,
-                color: colors.accent,
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '每日推荐',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$dateStr · 根据你的口味精选',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              if (!_isLoading)
-                IconButton(
-                  icon: Icon(Icons.refresh, color: colors.accent),
-                  onPressed: () => _loadDailyRecommendations(forceRefresh: true),
-                  tooltip: '刷新推荐',
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        if (_isLoading)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(40),
-              child: CircularProgressIndicator(color: colors.accent),
-            ),
-          )
-        else if (_dailyRecommendations.isEmpty)
-          Padding(
-            padding: padding,
-            child: Container(
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: colors.card,
-                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                border: Border.all(color: colors.border),
-              ),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.cloud_off,
-                      size: 48,
-                      color: colors.textSecondary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '加载推荐失败',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
-        else
-          Stack(
-            children: [
-              SizedBox(
-                height: 280,
-                child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(
-                    dragDevices: {
-                      PointerDeviceKind.touch,
-                      PointerDeviceKind.mouse,
-                    },
-                  ),
-                  child: ListView.builder(
-                    controller: _dailyScrollController,
-                    scrollDirection: Axis.horizontal,
-                    padding: padding,
-                    itemCount: _dailyRecommendations.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: _buildLargeSongCard(
-                          context,
-                          _dailyRecommendations[index],
-                          () {
-                            Provider.of<MusicProvider>(context, listen: false)
-                                .playSong(_dailyRecommendations[index], playlist: _dailyRecommendations);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              // 左箭头按钮 (仅桌面端显示)
-              if (Responsive.isDesktop(context))
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: Container(
-                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
-                    margin: const EdgeInsets.only(left: 8),
-                      decoration: BoxDecoration(
-                        color: colors.card.withValues(alpha: 0.9),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: IconButton(
-                        icon: Icon(Icons.chevron_left, color: colors.textPrimary),
-                        onPressed: () {
-                          _dailyScrollController.animateTo(
-                            _dailyScrollController.offset - 400,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              // 右箭头按钮 (仅桌面端显示)
-              if (Responsive.isDesktop(context))
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: Container(
-                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
-                    margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: colors.card.withValues(alpha: 0.9),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: IconButton(
-                        icon: Icon(Icons.chevron_right, color: colors.textPrimary),
-                        onPressed: () {
-                          _dailyScrollController.animateTo(
-                            _dailyScrollController.offset + 400,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-      ],
-    );
-  }
-
   Widget _buildRecommendedPlaylists(BuildContext context, List<Playlist> playlists) {
     final padding = Responsive.getHorizontalPadding(context);
     final colors = Provider.of<ThemeProvider>(context).colors;
@@ -724,30 +489,35 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           );
 
           try {
-            // 使用dissid获取歌单歌曲列表（第一页，60首）
+            Logger.info('🎵 开始加载歌单: ${playlist.title} (ID: ${playlist.id})', 'DiscoverScreen');
+            
+            // 直接获取歌单歌曲（第一页）
             final result = await _apiService.getPlaylistSongs(
               playlistId: playlist.id,
               page: 1,
               num: 60,
             );
             
+            Logger.debug('📊 歌单API返回结果: ${result.keys.toList()}', 'DiscoverScreen');
+            
             final List<Song> songs = result['songs'] as List<Song>;
             final int totalCount = result['totalCount'] as int;
+            
+            Logger.info('✅ 歌单加载完成: ${songs.length} 首歌曲，总数: $totalCount', 'DiscoverScreen');
 
             if (!mounted) return;
 
-            Navigator.pop(context); // 关闭加载对话框
-
-            // 创建包含歌曲的Playlist对象
+            // 创建 Playlist 对象
             final playlistObj = Playlist(
               id: playlist.id,
               name: playlist.title,
               coverUrl: playlist.coverUrl,
-              description: '',
               songs: songs,
             );
 
             if (!mounted) return;
+
+            Navigator.pop(context); // 关闭加载对话框
 
             // 跳转到歌单详情页
             Navigator.push(
@@ -761,6 +531,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
             );
           } catch (e) {
+            Logger.error('❌ 歌单加载失败: ${playlist.title} (ID: ${playlist.id})', e, null, 'DiscoverScreen');
+            
             if (!mounted) return;
 
             Navigator.pop(context); // 关闭加载对话框
@@ -768,7 +540,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('加载歌单失败,请稍后重试'),
+                content: Text('加载歌单失败: $e'),
                 backgroundColor: colors.card,
                 behavior: SnackBarBehavior.floating,
               ),
@@ -873,98 +645,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  Widget _buildLargeSongCard(BuildContext context, Song song, VoidCallback onTap) {
-    final colors = Provider.of<ThemeProvider>(context).colors;
-    final coverOverlay = colors.isLight ? 0.0 : 0.5; // 浅色主题无遮罩
-    
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: SizedBox(
-          width: 200,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                child: BackdropFilter(
-                  filter: AppStyles.backdropBlur,
-                  child: Container(
-                    decoration: AppStyles.glassDecoration(
-                      color: colors.card,
-                      opacity: 0.6,
-                      borderColor: colors.border,
-                      isLight: colors.isLight,
-                      borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                    ),
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
-                            child: CachedNetworkImage(
-                              imageUrl: song.coverUrl,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: colors.card.withValues(alpha: 0.5),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: colors.card,
-                                child: Icon(
-                                  Icons.music_note,
-                                  size: 60,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
-                          if (coverOverlay > 0)
-                            Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.black.withValues(alpha: coverOverlay),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: AppStyles.spacingM),
-              Text(
-                song.title,
-                style: Theme.of(context).textTheme.titleMedium,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: AppStyles.spacingXS),
-              Text(
-                song.artist,
-                style: Theme.of(context).textTheme.bodySmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

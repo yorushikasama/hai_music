@@ -1,15 +1,14 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/song.dart';
 import '../config/app_constants.dart';
 import 'dio_client.dart';
 import 'preferences_cache_service.dart';
+import '../utils/logger.dart';
 
 /// 音乐API服务类
 /// 支持多个音乐平台的搜索和播放功能
 class MusicApiService {
-  // API基础URL - 可以根据需要切换不同的API服务
-  static const String _baseUrl = 'https://api.injahow.cn';
+  // API基础URL - 使用配置文件中的常量
+  static const String _baseUrl = AppConstants.apiBaseUrl;
   final _dioClient = DioClient();
   final _prefsCache = PreferencesCacheService();
   
@@ -58,6 +57,7 @@ class MusicApiService {
       }
       return [];
     } catch (e) {
+      Logger.error('搜索歌曲失败', e, null, 'MusicApiService');
       return [];
     }
   }
@@ -159,18 +159,17 @@ class MusicApiService {
   }) async {
     const String platform = 'qq';
     try {
-      final url = Uri.parse('$_baseUrl/meting/?type=song&id=$songId&source=$platform');
-      
-      final response = await http.get(
-        url,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      final response = await _dioClient.get(
+        '$_baseUrl/meting/',
+        queryParameters: {
+          'type': 'song',
+          'id': songId,
+          'source': platform,
         },
       );
       
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final List<dynamic> data = response.data;
         if (data.isNotEmpty) {
           return Song.fromApiJson(data[0], platform);
         }
@@ -188,19 +187,13 @@ class MusicApiService {
     required String qqNumber,
   }) async {
     try {
-      // 使用落月 API
-      final url = Uri.parse('https://api.vkeys.cn/v2/music/tencent/info?uin=$qqNumber');
-      
-      final response = await http.get(
-        url,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
+      final response = await _dioClient.get(
+        'https://api.vkeys.cn/v2/music/tencent/info',
+        queryParameters: {'uin': qqNumber},
       );
       
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = response.data;
         if (data['code'] == 200 && data['data'] != null) {
           final List<Map<String, dynamic>> playlists = [];
           
@@ -274,23 +267,29 @@ class MusicApiService {
     String? uin,
   }) async {
     try {
-      // 使用落月 API 获取歌单歌曲列表（支持分页）
-      var urlStr = 'https://api.vkeys.cn/v2/music/tencent/dissinfo?id=$playlistId&page=$page&num=$num';
-      if (uin != null && uin.isNotEmpty) {
-        urlStr += '&uin=$uin';
-      }
-      final url = Uri.parse(urlStr);
+      final queryParams = {
+        'id': playlistId,
+        'page': page.toString(),
+        'num': num.toString(),
+      };
       
-      final response = await http.get(
-        url,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
+      if (uin != null && uin.isNotEmpty) {
+        queryParams['uin'] = uin;
+      }
+      
+      Logger.debug('🌐 请求歌单API: $playlistId, 页码: $page, 数量: $num, UIN: $uin', 'MusicApiService');
+      
+      final response = await _dioClient.get(
+        'https://api.vkeys.cn/v2/music/tencent/dissinfo',
+        queryParameters: queryParams,
       );
       
+      Logger.debug('📡 API响应状态: ${response.statusCode}', 'MusicApiService');
+      
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = response.data;
+        
+        Logger.debug('📋 API响应数据结构: code=${data['code']}, data存在=${data['data'] != null}', 'MusicApiService');
         
         if (data['code'] == 200 && data['data'] != null) {
           final List<dynamic> list = data['data']['list'] ?? [];
@@ -322,6 +321,83 @@ class MusicApiService {
     }
   }
 
+  /// 获取完整歌单（自动分页加载所有歌曲）
+  /// 
+  /// [playlistId] 歌单 ID
+  /// [uin] QQ账号，当歌单为我的收藏且无权限时可使用此参数绕过
+  /// [maxSongs] 最大歌曲数量限制，默认无限制
+  Future<Map<String, dynamic>> getCompletePlaylist({
+    required String playlistId,
+    String? uin,
+    int? maxSongs,
+  }) async {
+    Logger.info('🎵 开始获取完整歌单: $playlistId (UIN: $uin, 最大: $maxSongs)', 'MusicApiService');
+    
+    final List<Song> allSongs = [];
+    int currentPage = 1;
+    int totalCount = 0;
+    const int pageSize = 60;
+    
+    try {
+      while (maxSongs == null || allSongs.length < maxSongs) {
+        Logger.debug('📄 加载第 $currentPage 页，每页 $pageSize 首', 'MusicApiService');
+        
+        final result = await getPlaylistSongs(
+          playlistId: playlistId,
+          page: currentPage,
+          num: pageSize,
+          uin: uin,
+        );
+        
+        Logger.debug('📊 第 $currentPage 页API返回: ${result.keys.toList()}', 'MusicApiService');
+        
+        final List<Song> pageSongs = result['songs'] as List<Song>;
+        totalCount = result['totalCount'] as int;
+        
+        Logger.debug('✅ 第 $currentPage 页加载完成: ${pageSongs.length} 首歌曲，总数: $totalCount', 'MusicApiService');
+        
+        if (pageSongs.isEmpty) {
+          Logger.warning('⚠️ 第 $currentPage 页返回空结果，停止加载', 'MusicApiService');
+          break; // 没有更多歌曲了
+        }
+        
+        // 添加新歌曲，避免重复
+        final existingIds = allSongs.map((s) => s.id).toSet();
+        final uniqueSongs = pageSongs.where((s) => !existingIds.contains(s.id)).toList();
+        allSongs.addAll(uniqueSongs);
+        
+        Logger.debug('📈 累计加载: ${allSongs.length}/${totalCount} 首歌曲', 'MusicApiService');
+        
+        // 如果已经获取了所有歌曲，或者这一页的歌曲数量少于页面大小，说明没有更多了
+        if (allSongs.length >= totalCount || pageSongs.length < pageSize) {
+          Logger.info('🏁 歌单加载完成，原因: ${allSongs.length >= totalCount ? "已达到总数" : "页面数据不足"}', 'MusicApiService');
+          break;
+        }
+        
+        currentPage++;
+        
+        // 添加小延迟避免请求过快
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      
+      Logger.success('✅ 完整歌单加载成功: ${allSongs.length}/$totalCount 首歌曲', 'MusicApiService');
+      
+      return {
+        'songs': allSongs,
+        'totalCount': totalCount,
+        'loadedCount': allSongs.length,
+      };
+    } catch (e) {
+      Logger.error('❌ 完整歌单加载失败: $playlistId', e, null, 'MusicApiService');
+      return {
+        'songs': allSongs, // 返回已加载的歌曲
+        'totalCount': totalCount,
+        'loadedCount': allSongs.length,
+        'error': e.toString(),
+      };
+    }
+  }
+  
   /// 获取歌曲播放链接
   /// 
   /// [songId] 歌曲ID
@@ -333,28 +409,23 @@ class MusicApiService {
     int quality = 14,
   }) async {
     try {
-      String urlStr = 'https://api.vkeys.cn/v2/music/tencent?quality=$quality';
+      final queryParams = {'quality': quality.toString()};
       
       if (songId != null && songId.isNotEmpty) {
-        urlStr += '&id=$songId';
+        queryParams['id'] = songId;
       } else if (songMid != null && songMid.isNotEmpty) {
-        urlStr += '&mid=$songMid';
+        queryParams['mid'] = songMid;
       } else {
         return null;
       }
       
-      final url = Uri.parse(urlStr);
-      
-      final response = await http.get(
-        url,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
+      final response = await _dioClient.get(
+        'https://api.vkeys.cn/v2/music/tencent',
+        queryParameters: queryParams,
       );
       
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = response.data;
         
         if (data['code'] == 200 && data['data'] != null) {
           final songData = data['data'];

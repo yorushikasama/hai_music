@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import '../utils/logger.dart';
 
 /// 推荐歌单数据模型
@@ -22,18 +21,21 @@ class RecommendedPlaylist {
 
 /// QQ音乐推荐歌单爬虫服务
 class PlaylistScraperService {
+  final Dio _dio = Dio();
+
   /// 获取QQ音乐首页推荐歌单
   Future<List<RecommendedPlaylist>> fetchRecommendedPlaylists() async {
     try {
       Logger.network('开始请求 QQ音乐首页...', 'PlaylistScraper');
-      final url = Uri.parse('https://y.qq.com/');
-      final response = await http.get(
-        url,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        },
+      final response = await _dio.get(
+        'https://y.qq.com/',
+        options: Options(
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          },
+        ),
       );
       
       Logger.network('响应状态码: ${response.statusCode}', 'PlaylistScraper');
@@ -43,7 +45,7 @@ class PlaylistScraperService {
         return [];
       }
       
-      final htmlContent = utf8.decode(response.bodyBytes);
+      final htmlContent = response.data;
       Logger.debug('HTML 内容长度: ${htmlContent.length}', 'PlaylistScraper');
       
       final playlists = <RecommendedPlaylist>[];

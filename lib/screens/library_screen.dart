@@ -7,8 +7,6 @@ import '../models/song.dart';
 import '../theme/app_styles.dart';
 import '../providers/theme_provider.dart';
 import '../utils/responsive.dart';
-import '../utils/platform_utils.dart';
-import '../widgets/draggable_window_area.dart';
 import '../services/music_api_service.dart';
 import '../services/cache_manager_service.dart';
 import '../services/preferences_cache_service.dart';
@@ -19,7 +17,7 @@ import 'favorites_screen.dart';
 import 'recent_play_screen.dart';
 import 'downloaded_songs_screen.dart';
 import 'download_progress_screen.dart';
-import '../services/download_manager.dart';
+import 'library/library_header.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -126,105 +124,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverAppBar(
-              floating: true,
-              pinned: true,
-              expandedHeight: 100,
-              backgroundColor: Colors.transparent,
-              flexibleSpace: Stack(
-                children: [
-                  FlexibleSpaceBar(
-                    title: Text(
-                      '音乐库',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+            LibraryHeader(
+              onOpenDownloadProgress: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DownloadProgressScreen(),
                   ),
-                  // 桌面端拖动区域
-                  if (PlatformUtils.isDesktop)
-                    const Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 40,
-                      child: DraggableWindowBar(),
-                    ),
-                ],
-              ),
-              actions: [
-                // 下载进度按钮（带徽章）
-                ChangeNotifierProvider.value(
-                  value: DownloadManager(),
-                  child: Consumer<DownloadManager>(
-                    builder: (context, manager, child) {
-                      final downloadingCount = manager.downloadingTasks.length;
-                      return Stack(
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.download_outlined, color: colors.textPrimary),
-                            tooltip: '下载管理',
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const DownloadProgressScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          if (downloadingCount > 0)
-                            Positioned(
-                              right: 8,
-                              top: 8,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: colors.accent,
-                                  shape: BoxShape.circle,
-                                ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
-                                ),
-                                child: Text(
-                                  downloadingCount.toString(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+                );
+              },
+              onOpenStorageConfig: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const StorageConfigScreen(),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.cloud_outlined, color: colors.textPrimary),
-                  tooltip: '云端同步设置',
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const StorageConfigScreen(),
-                      ),
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: Icon(Icons.cleaning_services_outlined, color: colors.textPrimary),
-                  tooltip: '清理缓存',
-                  onPressed: () => _showClearCacheDialog(context),
-                ),
-                const SizedBox(width: 8),
-              ],
+                );
+              },
+              onClearCache: () => _showClearCacheDialog(context),
             ),
             SliverToBoxAdapter(
               child: Padding(
@@ -534,7 +451,11 @@ if (_isLoading)
         );
 
         try {
-          // 获取歌单中的歌曲（第一页，60首）
+          Logger.info('🎵 开始加载我的歌单: ${playlistData['name']} (ID: ${playlistData['id']})', 'LibraryScreen');
+          Logger.debug('📋 QQ号: $_qqNumber', 'LibraryScreen');
+          Logger.debug('📋 歌单数据结构: ${playlistData.keys.toList()}', 'LibraryScreen');
+          
+          // 直接获取歌单歌曲（第一页）
           final result = await _apiService.getPlaylistSongs(
             playlistId: playlistData['id'],
             page: 1,
@@ -542,31 +463,24 @@ if (_isLoading)
             uin: _qqNumber,
           );
           
+          Logger.debug('📊 我的歌单API返回结果: ${result.keys.toList()}', 'LibraryScreen');
+          
           final List<Song> songs = result['songs'] as List<Song>;
           final int totalCount = result['totalCount'] as int;
+          
+          Logger.info('✅ 我的歌单加载完成: ${songs.length} 首歌曲，总数: $totalCount', 'LibraryScreen');
 
           if (!mounted) return;
 
           Navigator.pop(context); // 关闭加载对话框
 
-          // 检查是否有歌曲
-          if (songs.isEmpty) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('该歌单暂无歌曲或无权限访问'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            return;
-          }
+          if (!mounted) return;
 
           // 创建 Playlist 对象
           final playlist = Playlist(
             id: playlistData['id'],
             name: playlistData['name'],
             coverUrl: playlistData['coverUrl'],
-            description: playlistData['description'],
             songs: songs,
           );
 
@@ -584,6 +498,8 @@ if (_isLoading)
             ),
           );
         } catch (e) {
+          Logger.error('❌ 我的歌单加载失败: ${playlistData['name']} (ID: ${playlistData['id']})', e, null, 'LibraryScreen');
+          
           if (!mounted) return;
 
           Navigator.pop(context); // 关闭加载对话框

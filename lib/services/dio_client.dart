@@ -18,18 +18,7 @@ class DioClient {
       },
     ));
 
-    // 添加拦截器(仅在debug模式下打印日志)
-    // dio.interceptors.add(InterceptorsWrapper(
-    //   onRequest: (options, handler) {
-    //     return handler.next(options);
-    //   },
-    //   onResponse: (response, handler) {
-    //     return handler.next(response);
-    //   },
-    //   onError: (error, handler) {
-    //     return handler.next(error);
-    //   },
-    // ));
+    // 可以在这里添加拦截器用于日志记录、错误处理等
   }
 
   /// GET 请求
