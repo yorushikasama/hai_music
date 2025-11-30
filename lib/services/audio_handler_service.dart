@@ -6,6 +6,7 @@ import '../utils/logger.dart';
 import 'audio_player_interface.dart';
 import 'audio_player_factory.dart';
 import 'song_url_service.dart';
+import 'smart_cache_service.dart';
 
 /// 重构后的 AudioHandler 实现
 /// 修复了播放列表管理问题，支持完整的播放列表功能
@@ -30,6 +31,9 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
 
   // 歌曲 URL 服务（负责获取和缓存播放链接）
   final SongUrlService _urlService = SongUrlService();
+  
+  // 智能缓存服务
+  final SmartCacheService _cacheService = SmartCacheService();
   
   MusicAudioHandler() {
     _initializeHandler();
@@ -177,6 +181,12 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
 
     // 真正开始播放
     await _audioPlayer.play(songWithUrl);
+
+    // 异步缓存歌曲（不阻塞播放）
+    Logger.info('🎵 [AudioHandler] 开始异步缓存歌曲: ${songWithUrl.title}', 'AudioHandler');
+    _cacheService.cacheOnPlay(songWithUrl).catchError((e) {
+      Logger.error('🎵 [AudioHandler] 缓存歌曲失败: ${songWithUrl.title}', e, null, 'AudioHandler');
+    });
 
     _broadcastState();
   }

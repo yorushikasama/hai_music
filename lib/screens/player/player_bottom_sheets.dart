@@ -17,8 +17,17 @@ void showPlayerMoreMenu(BuildContext rootContext) {
   );
 }
 
-/// 显示定时关闭对话框（仅 UI 展示，无实际定时功能）
+/// 显示定时关闭对话框
 void showSleepTimerDialog(BuildContext context) {
+  final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+  
+  // 如果定时器已激活，显示管理界面
+  if (musicProvider.sleepTimer.isActive) {
+    _showActiveSleepTimerDialog(context, musicProvider);
+    return;
+  }
+  
+  // 否则显示设置界面
   const initialDuration = Duration(minutes: 30);
 
   showModalBottomSheet(
@@ -79,24 +88,46 @@ void showSleepTimerDialog(BuildContext context) {
                           Navigator.pop(sheetContext);
                         },
                         child: const Text(
-                          '关闭',
+                          '取消',
                           style: TextStyle(color: Colors.white70),
                         ),
                       ),
                       TextButton(
                         onPressed: () {
                           if (selectedDuration.inSeconds <= 0) {
-                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('请选择有效的时间'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
                             return;
                           }
+                          
+                          // 启动定时器
+                          musicProvider.startSleepTimer(selectedDuration);
+                          
                           Navigator.pop(sheetContext);
-                          if (!sheetContext.mounted) return;
-                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          
+                          final hours = selectedDuration.inHours;
+                          final minutes = selectedDuration.inMinutes.remainder(60);
+                          String timeText;
+                          if (hours > 0) {
+                            timeText = '$hours小时${minutes > 0 ? '$minutes分钟' : ''}';
+                          } else {
+                            timeText = '$minutes分钟';
+                          }
+                          
+                          ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                '已选择定时时间：${selectedDuration.inMinutes} 分钟（当前版本未启用定时功能）',
+                              content: Text('定时关闭已启动：$timeText后暂停播放'),
+                              duration: const Duration(seconds: 3),
+                              action: SnackBarAction(
+                                label: '取消',
+                                onPressed: () {
+                                  musicProvider.cancelSleepTimer();
+                                },
                               ),
-                              duration: const Duration(seconds: 2),
                             ),
                           );
                         },
@@ -113,6 +144,143 @@ void showSleepTimerDialog(BuildContext context) {
             ),
           );
         },
+      );
+    },
+  );
+}
+
+/// 显示已激活的定时器管理界面
+void _showActiveSleepTimerDialog(BuildContext context, MusicProvider musicProvider) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 拖动指示器
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Text(
+                    '定时关闭已启动',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // 倒计时显示
+                  Consumer<MusicProvider>(
+                    builder: (context, provider, child) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text(
+                              '剩余时间',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              provider.sleepTimer.formattedRemainingTime,
+                              style: const TextStyle(
+                                color: Colors.orange,
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                fontFeatures: [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  // 操作按钮
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            musicProvider.extendSleepTimer(const Duration(minutes: 15));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('已延长15分钟'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.add, color: Colors.white),
+                          label: const Text(
+                            '延长15分钟',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white30),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            musicProvider.cancelSleepTimer();
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('定时关闭已取消'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.close),
+                          label: const Text('取消定时'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       );
     },
   );

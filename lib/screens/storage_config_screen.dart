@@ -178,38 +178,94 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
   Future<void> _saveConfig() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // 防止重复点击
+    if (_isLoading) return;
+
     setState(() => _isLoading = true);
 
-    final config = StorageConfig(
-      supabaseUrl: _supabaseUrlController.text.trim(),
-      supabaseAnonKey: _supabaseKeyController.text.trim(),
-      r2Endpoint: _r2EndpointController.text.trim(),
-      r2AccessKey: _r2AccessKeyController.text.trim(),
-      r2SecretKey: _r2SecretKeyController.text.trim(),
-      r2BucketName: _r2BucketController.text.trim(),
-      r2Region: _r2RegionController.text.trim(),
-      r2CustomDomain: _r2CustomDomainController.text.trim().isEmpty 
-          ? null 
-          : _r2CustomDomainController.text.trim(),
-      enableSync: _enableSync,
-    );
-
-    final musicProvider = Provider.of<MusicProvider>(context, listen: false);
-    final success = await musicProvider.favoriteManager.updateConfig(config);
-
-    setState(() => _isLoading = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? '配置保存成功' : '配置保存失败'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
+    try {
+      final config = StorageConfig(
+        supabaseUrl: _supabaseUrlController.text.trim(),
+        supabaseAnonKey: _supabaseKeyController.text.trim(),
+        r2Endpoint: _r2EndpointController.text.trim(),
+        r2AccessKey: _r2AccessKeyController.text.trim(),
+        r2SecretKey: _r2SecretKeyController.text.trim(),
+        r2BucketName: _r2BucketController.text.trim(),
+        r2Region: _r2RegionController.text.trim(),
+        r2CustomDomain: _r2CustomDomainController.text.trim().isEmpty 
+            ? null 
+            : _r2CustomDomainController.text.trim(),
+        enableSync: _enableSync,
       );
 
+      final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+      
+      // 保存配置
+      final success = await musicProvider.favoriteManager.updateConfig(config);
+
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
       if (success) {
-        Navigator.pop(context);
+        // 保存成功，显示成功提示并返回
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('✅ 配置保存成功'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        
+        // 延迟一下再返回，让用户看到成功提示
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } else {
+        // 保存失败，显示错误提示
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('❌ 配置保存失败，请重试'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() => _isLoading = false);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('保存配置时发生错误: $e'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 

@@ -52,7 +52,7 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   void nextTheme() {
-    final themes = AppThemeMode.values;
+    const themes = AppThemeMode.values;
     final currentIndex = themes.indexOf(_currentTheme);
     final nextIndex = (currentIndex + 1) % themes.length;
     setTheme(themes[nextIndex]);

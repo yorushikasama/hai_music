@@ -681,6 +681,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     if (confirmed != true) return;
 
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
     int successCount = 0;
 
     for (final favorite in selectedSongs) {
@@ -700,7 +701,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: Text('已移除 $successCount 首歌曲'),
         duration: const Duration(seconds: 2),

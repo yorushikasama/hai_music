@@ -76,7 +76,7 @@ class MobileAudioPlayer implements AudioPlayerInterface {
   Future<void> play(Song song) async {
     try {
       Logger.info('播放歌曲: ${song.title} - ${song.artist}', 'MobileAudioPlayer');
-      Logger.debug('播放链接: ${song.audioUrl.length > 100 ? song.audioUrl.substring(0, 100) + "..." : song.audioUrl}', 'MobileAudioPlayer');
+      Logger.debug('播放链接: ${song.audioUrl.length > 100 ? "${song.audioUrl.substring(0, 100)}..." : song.audioUrl}', 'MobileAudioPlayer');
       
       if (song.audioUrl.isEmpty) {
         throw Exception('歌曲播放链接为空');

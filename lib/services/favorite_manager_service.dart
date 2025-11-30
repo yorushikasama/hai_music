@@ -388,14 +388,44 @@ class FavoriteManagerService {
   /// 更新配置
   Future<bool> updateConfig(StorageConfig config) async {
     try {
-      await _configService.saveConfig(config);
+      Logger.info('开始更新配置...', 'FavoriteManager');
+      
+      // 保存配置到本地
+      final saveSuccess = await _configService.saveConfig(config);
+      if (!saveSuccess) {
+        Logger.error('配置保存到本地失败', null, null, 'FavoriteManager');
+        return false;
+      }
+      
+      Logger.success('配置已保存到本地', 'FavoriteManager');
+      
+      // 更新内存中的配置
       _config = config;
 
+      // 如果启用了云端同步，初始化云端服务
       if (config.isValid && config.enableSync) {
-        await _supabase.initialize(config);
-        await _r2.initialize(config);
+        Logger.info('配置有效且启用同步，初始化云端服务...', 'FavoriteManager');
+        
+        try {
+          await _supabase.initialize(config);
+          Logger.success('Supabase 初始化成功', 'FavoriteManager');
+        } catch (e) {
+          Logger.error('Supabase 初始化失败', e, null, 'FavoriteManager');
+          // 继续尝试初始化 R2
+        }
+        
+        try {
+          await _r2.initialize(config);
+          Logger.success('R2 初始化成功', 'FavoriteManager');
+        } catch (e) {
+          Logger.error('R2 初始化失败', e, null, 'FavoriteManager');
+          // 即使 R2 初始化失败，配置也已保存
+        }
+      } else {
+        Logger.info('云端同步未启用或配置无效', 'FavoriteManager');
       }
 
+      Logger.success('配置更新完成', 'FavoriteManager');
       return true;
     } catch (e) {
       Logger.error('更新配置失败', e, null, 'FavoriteManager');

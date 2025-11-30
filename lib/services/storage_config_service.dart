@@ -26,8 +26,31 @@ class StorageConfigService {
   /// 保存配置
   Future<bool> saveConfig(StorageConfig config) async {
     try {
+      // 确保已初始化
+      if (!_initialized) {
+        await init();
+      }
+      
       final jsonStr = jsonEncode(config.toJson());
-      return await _prefs.setString(_configKey, jsonStr);
+      Logger.debug('准备保存配置: ${jsonStr.length} 字节', 'StorageConfig');
+      
+      // 保存到 SharedPreferences
+      final success = await _prefs.setString(_configKey, jsonStr);
+      
+      if (success) {
+        // 验证保存是否成功
+        final savedStr = _prefs.getString(_configKey);
+        if (savedStr == jsonStr) {
+          Logger.success('配置保存成功并验证通过', 'StorageConfig');
+          return true;
+        } else {
+          Logger.error('配置保存验证失败', null, null, 'StorageConfig');
+          return false;
+        }
+      } else {
+        Logger.error('SharedPreferences 保存返回 false', null, null, 'StorageConfig');
+        return false;
+      }
     } catch (e) {
       Logger.error('保存配置失败', e, null, 'StorageConfig');
       return false;

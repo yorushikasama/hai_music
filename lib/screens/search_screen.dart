@@ -494,12 +494,14 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 处理菜单操作
   Future<void> _handleMenuAction(BuildContext context, String action, Song song) async {
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     
     switch (action) {
       case 'favorite':
         await musicProvider.toggleFavorite(song.id);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               musicProvider.isFavorite(song.id)
@@ -520,7 +522,7 @@ class _SearchScreenState extends State<SearchScreen> {
         if (!mounted) return;
         
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Text('已添加到下载队列：${song.title}'),
               duration: const Duration(seconds: 2),
@@ -528,8 +530,7 @@ class _SearchScreenState extends State<SearchScreen> {
               action: SnackBarAction(
                 label: '查看',
                 onPressed: () {
-                  Navigator.push(
-                    context,
+                  navigator.push(
                     MaterialPageRoute(
                       builder: (context) => const DownloadProgressScreen(),
                     ),
@@ -539,7 +540,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Text('《${song.title}》已在下载列表中'),
               duration: const Duration(seconds: 2),

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/logger.dart';
@@ -621,12 +620,14 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   /// 处理单曲菜单操作
   Future<void> _handleMenuAction(BuildContext context, String action, Song song) async {
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     
     switch (action) {
       case 'favorite':
         await musicProvider.toggleFavorite(song.id);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Row(
               children: [
@@ -665,7 +666,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         if (!mounted) return;
         
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Row(
                 children: [
@@ -688,8 +689,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                 label: '查看',
                 textColor: Colors.white,
                 onPressed: () {
-                  Navigator.push(
-                    context,
+                  navigator.push(
                     MaterialPageRoute(
                       builder: (context) => const DownloadProgressScreen(),
                     ),
@@ -699,7 +699,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Row(
                 children: [

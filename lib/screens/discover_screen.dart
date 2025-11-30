@@ -488,6 +488,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
           );
 
+          // 在异步操作前提取 context 相关对象
+          final navigator = Navigator.of(context);
+          final messenger = ScaffoldMessenger.of(context);
+          
           try {
             Logger.info('🎵 开始加载歌单: ${playlist.title} (ID: ${playlist.id})', 'DiscoverScreen');
             
@@ -515,13 +519,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               songs: songs,
             );
 
-            if (!mounted) return;
-
-            Navigator.pop(context); // 关闭加载对话框
+            navigator.pop(); // 关闭加载对话框
 
             // 跳转到歌单详情页
-            Navigator.push(
-              context,
+            navigator.push(
               MaterialPageRoute(
                 builder: (context) => PlaylistDetailScreen(
                   playlist: playlistObj,
@@ -535,10 +536,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             
             if (!mounted) return;
 
-            Navigator.pop(context); // 关闭加载对话框
+            navigator.pop(); // 关闭加载对话框
 
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
+            messenger.showSnackBar(
               SnackBar(
                 content: Text('加载歌单失败: $e'),
                 backgroundColor: colors.card,

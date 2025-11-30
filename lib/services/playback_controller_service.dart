@@ -10,6 +10,7 @@ import 'audio_player_factory.dart';
 import 'audio_service_manager.dart';
 import 'playlist_manager_service.dart';
 import 'song_url_service.dart';
+import 'smart_cache_service.dart';
 
 /// 播放控制服务
 /// 负责音频播放控制和状态管理
@@ -18,6 +19,7 @@ class PlaybackControllerService extends ChangeNotifier {
   late final AudioPlayerInterface _audioPlayer;
   final PlaylistManagerService _playlistManager;
   final SongUrlService _urlService;
+  final SmartCacheService _cacheService = SmartCacheService();
   
   // 播放状态
   bool _isPlaying = false;
@@ -283,7 +285,7 @@ class PlaybackControllerService extends ChangeNotifier {
         throw Exception('获取播放链接失败: ${currentSong.title}');
       }
       
-      Logger.info('获取到播放链接: ${audioUrl.length > 100 ? audioUrl.substring(0, 100) + "..." : audioUrl}', 'PlaybackController');
+      Logger.info('获取到播放链接: ${audioUrl.length > 100 ? "${audioUrl.substring(0, 100)}..." : audioUrl}', 'PlaybackController');
       
       // 创建带播放链接的歌曲对象
       final songWithUrl = _createSongWithUrl(currentSong, audioUrl);
@@ -291,6 +293,12 @@ class PlaybackControllerService extends ChangeNotifier {
       
       // 播放歌曲
       await _audioPlayer.play(songWithUrl);
+      
+      // 异步缓存歌曲（不阻塞播放）
+      Logger.info('🎵 [播放控制器] 开始异步缓存歌曲: ${songWithUrl.title}', 'PlaybackController');
+      _cacheService.cacheOnPlay(songWithUrl).catchError((e) {
+        Logger.error('🎵 [播放控制器] 缓存歌曲失败: ${songWithUrl.title}', e, null, 'PlaybackController');
+      });
       
       // 更新系统媒体通知 (仅移动端)
       Logger.debug('🔄 准备更新系统媒体通知...', 'PlaybackController');

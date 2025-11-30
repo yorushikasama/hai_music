@@ -1,22 +1,38 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../utils/logger.dart';
+import 'smart_cache_service.dart';
 
 /// 缓存信息模型
 class CacheInfo {
-  final int audioSize;
-  final int coverSize;
+  final int playCacheSize;      // 播放缓存
+  final int imageSize;          // 图片缓存
+  final int downloadSize;       // 下载文件
   final int totalSize;
   final DateTime timestamp;
 
   CacheInfo({
-    required this.audioSize,
-    required this.coverSize,
+    required this.playCacheSize,
+    required this.imageSize,
+    required this.downloadSize,
     required this.totalSize,
     required this.timestamp,
   });
 
   int get total => totalSize;
+  
+  // 兼容性属性
+  int get audioSize => playCacheSize;
+  int get coverSize => imageSize;
+  
+  /// 获取详细信息
+  Map<String, int> get details => {
+    'playCache': playCacheSize,
+    'image': imageSize,
+    'download': downloadSize,
+  };
 }
 
 /// 缓存管理服务 (单例模式)
@@ -46,17 +62,36 @@ class CacheManagerService {
       }
     }
 
-    // 重新计算
+    // 重新计算所有缓存
     Logger.cache('重新计算缓存大小...', 'CacheManager');
-    final audioSize = await getAudioCacheSize();
-    final coverSize = await getCoverCacheSize();
-    final totalSize = audioSize + coverSize;
+    final smartCache = SmartCacheService();
+    
+    Logger.debug('🎵 [缓存管理器] 开始计算各类缓存大小...', 'CacheManager');
+    
+    final playCacheSize = await smartCache.getPlayCacheSize();
+    Logger.debug('🎵 [缓存管理器] 播放缓存大小: ${formatSize(playCacheSize)}', 'CacheManager');
+    
+    final imageSize = await getImageCacheSize();
+    Logger.debug('🎵 [缓存管理器] 图片缓存大小: ${formatSize(imageSize)}', 'CacheManager');
+    
+    final downloadSize = await getDownloadCacheSize();
+    Logger.debug('🎵 [缓存管理器] 下载文件大小: ${formatSize(downloadSize)}', 'CacheManager');
+    
+    final totalSize = playCacheSize + imageSize + downloadSize;
 
     _cachedInfo = CacheInfo(
-      audioSize: audioSize,
-      coverSize: coverSize,
+      playCacheSize: playCacheSize,
+      imageSize: imageSize,
+      downloadSize: downloadSize,
       totalSize: totalSize,
       timestamp: DateTime.now(),
+    );
+
+    Logger.cache(
+      '缓存统计 - 播放: ${formatSize(playCacheSize)}, '
+      '图片: ${formatSize(imageSize)}, 下载: ${formatSize(downloadSize)}, '
+      '总计: ${formatSize(totalSize)}',
+      'CacheManager',
     );
 
     return _cachedInfo!;
@@ -68,120 +103,157 @@ class CacheManagerService {
     return info.totalSize;
   }
 
-  /// 获取音频缓存大小
-  Future<int> getAudioCacheSize() async {
+  /// 获取图片缓存大小 (CachedNetworkImage 使用的缓存)
+  Future<int> getImageCacheSize() async {
+    try {
+      // CachedNetworkImage 使用 flutter_cache_manager
+      // 缓存在临时目录下的 libCachedImageData 文件夹
+      final tempDir = await getTemporaryDirectory();
+      final cacheDir = Directory(path.join(tempDir.path, 'libCachedImageData'));
+      
+      if (!await cacheDir.exists()) {
+        return 0;
+      }
+
+      int totalSize = 0;
+      await for (var entity in cacheDir.list(recursive: true, followLinks: false)) {
+        if (entity is File) {
+          try {
+            totalSize += await entity.length();
+          } catch (e) {
+            // 忽略无法访问的文件
+          }
+        }
+      }
+      return totalSize;
+    } catch (e) {
+      Logger.error('获取图片缓存大小失败', e, null, 'CacheManager');
+      return 0;
+    }
+  }
+
+  /// 获取下载文件大小
+  Future<int> getDownloadCacheSize() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
+      final downloadDir = Directory(path.join(dir.path, 'HaiMusic', 'Downloads'));
 
       if (!await downloadDir.exists()) {
         return 0;
       }
 
-      // 计算音频文件大小 (.mp3 文件)
       int totalSize = 0;
       await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
-        if (entity is File && entity.path.endsWith('.mp3')) {
+        if (entity is File) {
           totalSize += await entity.length();
         }
       }
       return totalSize;
     } catch (e) {
-      Logger.error('获取音频缓存大小失败', e, null, 'CacheManager');
+      Logger.error('获取下载文件大小失败', e, null, 'CacheManager');
       return 0;
     }
   }
-
-  /// 获取封面缓存大小
-  Future<int> getCoverCacheSize() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
-
-      if (!await downloadDir.exists()) {
-        return 0;
-      }
-
-      // 计算封面文件大小 (.jpg 文件)
-      int totalSize = 0;
-      await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
-        if (entity is File && entity.path.endsWith('.jpg')) {
-          totalSize += await entity.length();
-        }
-      }
-      return totalSize;
-    } catch (e) {
-      Logger.error('获取封面缓存大小失败', e, null, 'CacheManager');
-      return 0;
-    }
-  }
-
 
   /// 清理所有缓存
   Future<bool> clearAllCache() async {
+    bool success = true;
+    
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
-
-      if (await downloadDir.exists()) {
-        await downloadDir.delete(recursive: true);
-        Logger.success('缓存清理完成', 'CacheManager');
-
-        // 清除缓存信息
-        _invalidateCache();
-
-        return true;
+      Logger.info('开始清理所有缓存...', 'CacheManager');
+      final smartCache = SmartCacheService();
+      
+      // 1. 清理播放缓存
+      try {
+        await smartCache.clearPlayCache();
+        Logger.success('播放缓存已清理', 'CacheManager');
+      } catch (e) {
+        Logger.error('清理播放缓存失败', e, null, 'CacheManager');
+        success = false;
       }
 
-      return true;
+      // 2. 清理图片缓存 (CachedNetworkImage)
+      try {
+        final cacheManager = DefaultCacheManager();
+        await cacheManager.emptyCache();
+        
+        // 直接删除缓存目录（更彻底）
+        final tempDir = await getTemporaryDirectory();
+        final cacheDir = Directory(path.join(tempDir.path, 'libCachedImageData'));
+        if (await cacheDir.exists()) {
+          await cacheDir.delete(recursive: true);
+        }
+        
+        Logger.success('图片缓存已清理', 'CacheManager');
+      } catch (e) {
+        Logger.error('清理图片缓存失败', e, null, 'CacheManager');
+        success = false;
+      }
+
+      // 3. 不清理下载文件（保护用户数据）
+
+      // 清除缓存信息
+      _invalidateCache();
+
+      Logger.success('所有缓存清理完成', 'CacheManager');
+      return success;
     } catch (e) {
       Logger.error('清理缓存失败', e, null, 'CacheManager');
       return false;
     }
   }
 
-  /// 清理音频缓存
-  Future<bool> clearAudioCache() async {
+  /// 清理播放缓存
+  Future<bool> clearPlayCache() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
-
-      if (await downloadDir.exists()) {
-        // 只删除音频文件 (.mp3)
-        await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
-          if (entity is File && entity.path.endsWith('.mp3')) {
-            await entity.delete();
-          }
-        }
-        Logger.success('音频缓存清理完成', 'CacheManager');
-
-        // 清除缓存信息
-        _invalidateCache();
-
-        return true;
-      }
-
+      await SmartCacheService().clearPlayCache();
+      _invalidateCache();
       return true;
     } catch (e) {
-      Logger.error('清理音频缓存失败', e, null, 'CacheManager');
+      Logger.error('清理播放缓存失败', e, null, 'CacheManager');
       return false;
     }
   }
 
-  /// 清理封面缓存
-  Future<bool> clearCoverCache() async {
+  /// 清理图片缓存 (CachedNetworkImage)
+  Future<bool> clearImageCache() async {
+    try {
+      // 方法1：使用 DefaultCacheManager 清理
+      final cacheManager = DefaultCacheManager();
+      await cacheManager.emptyCache();
+      
+      // 方法2：直接删除缓存目录（更彻底）
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final cacheDir = Directory(path.join(tempDir.path, 'libCachedImageData'));
+        if (await cacheDir.exists()) {
+          await cacheDir.delete(recursive: true);
+        }
+      } catch (e) {
+        Logger.warning('删除缓存目录失败: $e', 'CacheManager');
+      }
+      
+      Logger.success('图片缓存清理完成', 'CacheManager');
+
+      // 清除缓存信息
+      _invalidateCache();
+
+      return true;
+    } catch (e) {
+      Logger.error('清理图片缓存失败', e, null, 'CacheManager');
+      return false;
+    }
+  }
+
+  /// 清理下载文件
+  Future<bool> clearDownloadCache() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final downloadDir = Directory('${dir.path}/HaiMusic/Downloads');
+      final downloadDir = Directory(path.join(dir.path, 'HaiMusic', 'Downloads'));
 
       if (await downloadDir.exists()) {
-        // 只删除封面文件 (.jpg)
-        await for (var entity in downloadDir.list(recursive: true, followLinks: false)) {
-          if (entity is File && entity.path.endsWith('.jpg')) {
-            await entity.delete();
-          }
-        }
-        Logger.success('封面缓存清理完成', 'CacheManager');
+        await downloadDir.delete(recursive: true);
+        Logger.success('下载文件清理完成', 'CacheManager');
 
         // 清除缓存信息
         _invalidateCache();
@@ -191,7 +263,7 @@ class CacheManagerService {
 
       return true;
     } catch (e) {
-      Logger.error('清理封面缓存失败', e, null, 'CacheManager');
+      Logger.error('清理下载文件失败', e, null, 'CacheManager');
       return false;
     }
   }

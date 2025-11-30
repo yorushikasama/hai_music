@@ -450,6 +450,10 @@ if (_isLoading)
           ),
         );
 
+        // 在异步操作前提取 context 相关对象
+        final navigator = Navigator.of(context);
+        final messenger = ScaffoldMessenger.of(context);
+        
         try {
           Logger.info('🎵 开始加载我的歌单: ${playlistData['name']} (ID: ${playlistData['id']})', 'LibraryScreen');
           Logger.debug('📋 QQ号: $_qqNumber', 'LibraryScreen');
@@ -472,7 +476,7 @@ if (_isLoading)
 
           if (!mounted) return;
 
-          Navigator.pop(context); // 关闭加载对话框
+          navigator.pop(); // 关闭加载对话框
 
           if (!mounted) return;
 
@@ -484,11 +488,8 @@ if (_isLoading)
             songs: songs,
           );
 
-          if (!mounted) return;
-
           // 跳转到歌单详情页
-          Navigator.push(
-            context,
+          navigator.push(
             MaterialPageRoute(
               builder: (context) => PlaylistDetailScreen(
                 playlist: playlist,
@@ -502,10 +503,10 @@ if (_isLoading)
           
           if (!mounted) return;
 
-          Navigator.pop(context); // 关闭加载对话框
+          navigator.pop(); // 关闭加载对话框
 
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Text('加载歌单失败: $e'),
               backgroundColor: Colors.red,
@@ -695,22 +696,25 @@ if (_isLoading)
           ),
           ElevatedButton(
             onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+              
               final newQQ = controller.text.trim();
               if (newQQ.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(content: Text('QQ 号不能为空')),
                 );
                 return;
               }
               
               if (!RegExp(r'^\d+$').hasMatch(newQQ)) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(content: Text('请输入有效的 QQ 号')),
                 );
                 return;
               }
               
-              Navigator.pop(context);
+              navigator.pop();
               
               setState(() {
                 _qqNumber = newQQ;
@@ -721,7 +725,7 @@ if (_isLoading)
               _loadUserPlaylists(forceRefresh: true);
 
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 SnackBar(content: Text('已切换到 QQ: $newQQ')),
               );
             },
@@ -739,6 +743,7 @@ if (_isLoading)
   void _showClearCacheDialog(BuildContext context) async {
     final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
     final cacheManager = CacheManagerService(); // 使用单例
+    final navigator = Navigator.of(context);
 
     // 显示加载对话框
     showDialog(
@@ -755,7 +760,7 @@ if (_isLoading)
     if (!mounted) return;
 
     // 关闭加载对话框
-    Navigator.pop(context);
+    navigator.pop();
 
     // 格式化大小
     final totalSizeStr = cacheManager.formatSize(cacheInfo.totalSize);
@@ -798,12 +803,29 @@ if (_isLoading)
               size: coverSizeStr,
               colors: colors,
             ),
+            SizedBox(height: 8),
+            _buildCacheItem(
+              icon: Icons.photo_library,
+              label: '图片缓存',
+              size: cacheManager.formatSize(cacheInfo.imageSize),
+              colors: colors,
+            ),
+            if (cacheInfo.downloadSize > 0) ...[
+              SizedBox(height: 8),
+              _buildCacheItem(
+                icon: Icons.download,
+                label: '下载文件',
+                size: cacheManager.formatSize(cacheInfo.downloadSize),
+                colors: colors,
+              ),
+            ],
             SizedBox(height: 16),
             Text(
-              '清理缓存将删除所有已下载的音频和封面文件',
+              '清理缓存将删除音频、封面和图片缓存\n（不包括下载的歌曲）',
               style: TextStyle(
                 fontSize: 13,
                 color: colors.textSecondary,
+                height: 1.4,
               ),
             ),
           ],
@@ -815,7 +837,10 @@ if (_isLoading)
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+              
+              navigator.pop();
 
               // 显示加载对话框
               showDialog(
@@ -831,10 +856,10 @@ if (_isLoading)
 
               if (!mounted) return;
 
-              Navigator.pop(context); // 关闭加载对话框
+              navigator.pop(); // 关闭加载对话框
 
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(success ? '✅ 缓存清理完成' : '❌ 清理失败'),
                   duration: const Duration(seconds: 2),

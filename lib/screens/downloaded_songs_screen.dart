@@ -520,7 +520,10 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+              
+              navigator.pop();
               
               final success = await _downloadService.deleteDownloadedSong(song.id);
               
@@ -529,7 +532,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                   // 从下载管理器中移除任务记录
                   DownloadManager().removeTask(song.id);
                   
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text('已删除：${song.title}'),
                       duration: const Duration(seconds: 2),
@@ -540,7 +543,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                   );
                   _loadDownloadedSongs();
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(
                       content: const Text('删除失败，请重试'),
                       duration: const Duration(seconds: 2),

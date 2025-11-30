@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -244,6 +243,8 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   child: Column(
                     children: [
                       _buildAppBar(context),
+                      // 定时器状态显示
+                      _buildSleepTimerIndicator(context, musicProvider),
                       Expanded(
                         child: Center(
                           child: SingleChildScrollView(
@@ -326,6 +327,56 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
           ),
         ),
       ],
+    );
+  }
+
+  /// 构建睡眠定时器指示器
+  Widget _buildSleepTimerIndicator(BuildContext context, MusicProvider musicProvider) {
+    if (!musicProvider.sleepTimer.isActive) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: GestureDetector(
+        onTap: () => showSleepTimerDialog(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.orange.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.timer,
+                size: 18,
+                color: Colors.orange,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '定时关闭: ${musicProvider.sleepTimer.formattedRemainingTime}',
+                style: const TextStyle(
+                  color: Colors.orange,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: Colors.orange.withValues(alpha: 0.7),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

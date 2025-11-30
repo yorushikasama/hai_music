@@ -11,6 +11,7 @@ import '../services/play_history_service.dart';
 import '../services/favorite_manager_service.dart';
 import '../services/preferences_service.dart';
 import '../services/audio_service_manager.dart';
+import '../services/sleep_timer_service.dart';
 import '../utils/platform_utils.dart';
 import '../utils/logger.dart';
 
@@ -24,6 +25,7 @@ class MusicProvider extends ChangeNotifier {
   final PlayHistoryService _historyService = PlayHistoryService();
   final FavoriteManagerService _favoriteManager = FavoriteManagerService();
   final PreferencesService _prefs = PreferencesService();
+  final SleepTimerService _sleepTimer = SleepTimerService();
   
   // 收藏功能
   final Set<String> _favoriteSongIds = <String>{};
@@ -145,6 +147,7 @@ class MusicProvider extends ChangeNotifier {
   
   FavoriteManagerService get favoriteManager => _favoriteManager;
   PlayHistoryService get historyService => _historyService;
+  SleepTimerService get sleepTimer => _sleepTimer;
   
   // 兼容性属性
   String get audioQuality => _prefs.getAudioQuality();
@@ -227,6 +230,7 @@ class MusicProvider extends ChangeNotifier {
     // 预加载播放链接
     _urlService.getSongUrl(song).catchError((e) {
       Logger.warning('预加载播放链接失败: ${song.title}', 'MusicProvider');
+      return null; // 修复：onError 处理器必须返回值
     });
   }
   
@@ -302,6 +306,27 @@ class MusicProvider extends ChangeNotifier {
     await _prefs.setAudioQuality(quality);
     Logger.info('设置音质: $quality', 'MusicProvider');
     notifyListeners();
+  }
+  
+  // ========== 睡眠定时器 ==========
+  
+  /// 启动睡眠定时器
+  void startSleepTimer(Duration duration) {
+    _sleepTimer.start(duration, () {
+      // 定时结束时暂停播放
+      forcePause();
+      Logger.success('睡眠定时器触发，已暂停播放', 'MusicProvider');
+    });
+  }
+  
+  /// 取消睡眠定时器
+  void cancelSleepTimer() {
+    _sleepTimer.cancel();
+  }
+  
+  /// 延长睡眠定时器
+  void extendSleepTimer(Duration additionalDuration) {
+    _sleepTimer.extend(additionalDuration);
   }
   
   // ========== 收藏功能 ==========
@@ -432,7 +457,7 @@ class MusicProvider extends ChangeNotifier {
       final jsonStr = jsonEncode(session);
       _prefs.setLastSession(jsonStr);
 
-      final preview = jsonStr.length > 200 ? jsonStr.substring(0, 200) + '...' : jsonStr;
+      final preview = jsonStr.length > 200 ? '${jsonStr.substring(0, 200)}...' : jsonStr;
       Logger.debug(
         '🧷 [Session] 已保存会话: jsonLen=${jsonStr.length}, preview=$preview',
         'MusicProvider',
@@ -568,6 +593,7 @@ class MusicProvider extends ChangeNotifier {
     _playbackController.dispose();
     _playlistManager.dispose();
     _urlService.clearAllCache();
+    _sleepTimer.dispose();
     
     super.dispose();
   }
