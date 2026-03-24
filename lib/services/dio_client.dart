@@ -32,7 +32,7 @@ class DioClient {
         Logger.debug('收到响应: ${response.statusCode}', 'DioClient');
         return handler.next(response);
       },
-      onError: (DioError e, handler) {
+      onError: (DioException e, handler) {
         Logger.error('网络请求错误', e, null, 'DioClient');
         return handler.next(e);
       },
@@ -59,12 +59,12 @@ class DioClient {
           options: options,
         );
       } catch (e) {
-        if (e is DioError) {
+        if (e is DioException) {
           // 只对网络错误进行重试
-          if (e.type == DioErrorType.connectionTimeout ||
-              e.type == DioErrorType.receiveTimeout ||
-              e.type == DioErrorType.sendTimeout ||
-              e.type == DioErrorType.unknown) {
+          if (e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.receiveTimeout ||
+              e.type == DioExceptionType.sendTimeout ||
+              e.type == DioExceptionType.unknown) {
             if (attempts < retryCount) {
               Logger.warning('网络请求失败，正在重试 ($attempts/$retryCount)...', 'DioClient');
               await Future.delayed(retryDelay);
@@ -101,12 +101,12 @@ class DioClient {
           options: options,
         );
       } catch (e) {
-        if (e is DioError) {
+        if (e is DioException) {
           // 只对网络错误进行重试
-          if (e.type == DioErrorType.connectionTimeout ||
-              e.type == DioErrorType.receiveTimeout ||
-              e.type == DioErrorType.sendTimeout ||
-              e.type == DioErrorType.unknown) {
+          if (e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.receiveTimeout ||
+              e.type == DioExceptionType.sendTimeout ||
+              e.type == DioExceptionType.unknown) {
             if (attempts < retryCount) {
               Logger.warning('网络请求失败，正在重试 ($attempts/$retryCount)...', 'DioClient');
               await Future.delayed(retryDelay);

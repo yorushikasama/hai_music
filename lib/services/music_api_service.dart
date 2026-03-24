@@ -3,6 +3,7 @@ import '../config/app_constants.dart';
 import 'dio_client.dart';
 import 'preferences_cache_service.dart';
 import '../utils/logger.dart';
+import '../utils/result.dart';
 
 /// 音乐API服务类
 /// 支持多个音乐平台的搜索和播放功能
@@ -13,11 +14,11 @@ class MusicApiService {
   static final _prefsCache = PreferencesCacheService();
   
   /// 搜索歌曲（使用点歌API - 返回列表）
-  /// 
+  ///
   /// [keyword] 搜索关键词（歌曲名或歌手名）
   /// [limit] 返回结果数量限制，默认30，最大60
   /// [page] 页码，默认1
-  Future<List<Song>> searchSongs({
+  Future<Result<List<Song>>> searchSongs({
     required String keyword,
     int limit = 30,
     int page = 1,
@@ -32,16 +33,16 @@ class MusicApiService {
           'page': page,
         },
       );
-      
+
       if (response.statusCode == 200) {
         final data = response.data;
         if (data['code'] == 200 && data['data'] != null) {
           // 点歌API返回的是数组
-          final List<dynamic> songList = data['data'] is List 
-              ? data['data'] 
+          final List<dynamic> songList = data['data'] is List
+              ? data['data']
               : [data['data']];
-          
-          return songList.map((item) {
+
+          final songs = songList.map((item) {
             return Song(
               id: item['id']?.toString() ?? '',
               title: item['song'] ?? '未知歌曲',
@@ -53,12 +54,15 @@ class MusicApiService {
               platform: 'qq',
             );
           }).toList();
+
+          return Success(songs);
         }
+        return Failure('API返回错误: ${data['code']}');
       }
-      return [];
+      return Failure('HTTP错误: ${response.statusCode}');
     } catch (e) {
       Logger.error('搜索歌曲失败', e, null, 'MusicApiService');
-      return [];
+      return Failure('搜索歌曲失败', error: e);
     }
   }
   

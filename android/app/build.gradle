@@ -5,8 +5,8 @@ plugins {
 }
 
 // 使用 pubspec.yaml 中的版本信息
-def flutterVersionCode = 2
-def flutterVersionName = '1.0.1'
+def flutterVersionCode = flutter.versionCode
+def flutterVersionName = flutter.versionName
 
 android {
     namespace "com.example.hai_music"

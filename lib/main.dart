@@ -37,11 +37,16 @@ void main() async {
         ),
       );
       
+      // 等待 AudioHandler 完全初始化
+      print('🎵 [Main] 等待 AudioHandler 完全初始化...');
+      await audioHandler.ready;
+      
       // 将 AudioHandler 实例保存到管理器中
       AudioServiceManager.instance.setAudioHandler(audioHandler);
       print('✅ [Main] AudioService 初始化成功');
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ [Main] AudioService 初始化失败: $e');
+      print('❌ [Main] 堆栈跟踪: $stackTrace');
     }
   } else {
     print('🖥️ [Main] 桌面端，跳过 AudioService 初始化');

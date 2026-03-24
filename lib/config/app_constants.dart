@@ -1,8 +1,23 @@
+import 'package:package_info_plus/package_info_plus.dart';
+
 /// 应用常量配置
 class AppConstants {
   // ==================== 应用信息 ====================
   static const String appName = 'Hai Music';
-  static const String appVersion = '1.0.0';
+  
+  // 从 pubspec.yaml 动态获取版本号
+  static Future<String> getAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      return packageInfo.version;
+    } catch (e) {
+      // 兜底版本号
+      return '1.0.2';
+    }
+  }
+  
+  // 静态版本号（用于不需要异步的场景）
+  static const String fallbackVersion = '1.0.2';
   
   // ==================== API 配置 ====================
   static const String apiBaseUrl = 'https://api.injahow.cn';

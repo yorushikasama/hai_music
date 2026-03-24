@@ -1,7 +1,7 @@
 name: hai_music
 description: A cross-platform music player application
 publish_to: 'none'
-version: 1.0.1+2
+version: 1.0.11+12
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  package_info_plus: ^4.2.0
   provider: ^6.1.2
   google_fonts: ^6.2.1
   animations: ^2.0.11

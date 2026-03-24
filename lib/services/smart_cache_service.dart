@@ -2,13 +2,13 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/song.dart';
 import '../utils/logger.dart';
 import '../utils/format_utils.dart';
 import '../config/app_constants.dart';
 import 'music_api_service.dart';
+import 'dio_client.dart';
+import 'preferences_cache_service.dart';
 
 /// 智能缓存服务
 /// 自动缓存最近播放的歌曲，支持 LRU 清理策略和缓存过期管理
@@ -17,9 +17,9 @@ class SmartCacheService {
   factory SmartCacheService() => _instance;
   SmartCacheService._internal();
 
-  final Dio _dio = Dio();
+  final DioClient _dioClient = DioClient();
   final MusicApiService _apiService = MusicApiService();
-  SharedPreferences? _prefs;
+  final PreferencesCacheService _prefsCache = PreferencesCacheService();
 
   // 缓存配置
   static const int maxPlayCacheCount = 50; // 最多缓存 50 首歌
@@ -109,8 +109,8 @@ class SmartCacheService {
     }
 
     try {
-      await _dio.download(audioUrl, filePath);
-      } catch (e) {
+      await _dioClient.dio.download(audioUrl, filePath);
+    } catch (e) {
       Logger.error('🎵 [下载] 下载失败: ${song.title}', e, null, 'SmartCache');
       rethrow;
     }
@@ -225,18 +225,12 @@ class SmartCacheService {
     }
   }
 
-  /// 初始化 SharedPreferences
-  Future<void> _ensurePrefsInitialized() async {
-    _prefs ??= await SharedPreferences.getInstance();
-  }
-
   /// 获取缓存列表
   Future<List<Map<String, dynamic>>> _getCacheList() async {
     try {
-      await _ensurePrefsInitialized();
-      final jsonStr = _prefs!.getString(playCacheKey);
+      final jsonStr = await _prefsCache.getString(playCacheKey);
       if (jsonStr == null || jsonStr.isEmpty) return [];
-      
+
       final List<dynamic> list = jsonDecode(jsonStr);
       return list.cast<Map<String, dynamic>>();
     } catch (e) {
@@ -246,9 +240,8 @@ class SmartCacheService {
 
   /// 保存缓存列表
   Future<void> _saveCacheList(List<Map<String, dynamic>> list) async {
-    await _ensurePrefsInitialized();
     final jsonStr = jsonEncode(list);
-    await _prefs!.setString(playCacheKey, jsonStr);
+    await _prefsCache.setString(playCacheKey, jsonStr);
   }
 
   /// 添加到缓存列表
@@ -323,9 +316,8 @@ class SmartCacheService {
       if (await cacheDir.exists()) {
         await cacheDir.delete(recursive: true);
       }
-      
-      await _ensurePrefsInitialized();
-      await _prefs!.remove(playCacheKey);
+
+      await _prefsCache.remove(playCacheKey);
       Logger.success('播放缓存清理完成', 'SmartCache');
       return true;
     } catch (e) {

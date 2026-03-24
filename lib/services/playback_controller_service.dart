@@ -16,7 +16,7 @@ import 'smart_cache_service.dart';
 /// 负责音频播放控制和状态管理
 class PlaybackControllerService extends ChangeNotifier {
   // 核心服务
-  late final AudioPlayerInterface _audioPlayer;
+  AudioPlayerInterface? _audioPlayer; // 改为可空，避免移动端未初始化问题
   final PlaylistManagerService _playlistManager;
   final SongUrlService _urlService;
   final SmartCacheService _cacheService = SmartCacheService();
@@ -124,7 +124,7 @@ class PlaybackControllerService extends ChangeNotifier {
     _audioPlayer = AudioPlayerFactory.createPlayer();
 
     // 监听播放状态变化
-    _subscriptions.add(_audioPlayer.playingStream.listen((playing) {
+    _subscriptions.add(_audioPlayer!.playingStream.listen((playing) {
       if (_isPlaying != playing) {
         _isPlaying = playing;
         Logger.debug('播放状态变化: $playing', 'PlaybackController');
@@ -133,19 +133,19 @@ class PlaybackControllerService extends ChangeNotifier {
     }));
 
     // 监听播放位置变化
-    _subscriptions.add(_audioPlayer.positionStream.listen((position) {
+    _subscriptions.add(_audioPlayer!.positionStream.listen((position) {
       _currentPosition = position;
       notifyListeners();
     }));
 
     // 监听总时长变化
-    _subscriptions.add(_audioPlayer.durationStream.listen((duration) {
+    _subscriptions.add(_audioPlayer!.durationStream.listen((duration) {
       _totalDuration = duration ?? Duration.zero;
       notifyListeners();
     }));
 
     // 监听播放完成
-    _subscriptions.add(_audioPlayer.completionStream.listen((_) {
+    _subscriptions.add(_audioPlayer!.completionStream.listen((_) {
       _handlePlaybackCompleted();
     }));
   }
@@ -290,7 +290,21 @@ class PlaybackControllerService extends ChangeNotifier {
       _currentPlayingSong = songWithUrl;
       
       // 播放歌曲
-      await _audioPlayer.play(songWithUrl);
+      if (PlatformUtils.isDesktop) {
+        // 桌面端：使用本地播放器
+        await _audioPlayer?.play(songWithUrl);
+      } else {
+        // 移动端：通过 AudioHandler 播放
+        final handler = AudioServiceManager.instance.audioHandler;
+        if (handler != null) {
+          // 找到歌曲在播放列表中的索引
+          final index = _playlistManager.playlist.indexWhere((s) => s.id == songWithUrl.id);
+          if (index >= 0) {
+            await handler.skipToQueueItem(index);
+            await handler.play();
+          }
+        }
+      }
       
       // 异步缓存歌曲（不阻塞播放）
       Logger.info('🎵 [播放控制器] 开始异步缓存歌曲: ${songWithUrl.title}', 'PlaybackController');
@@ -324,11 +338,11 @@ class PlaybackControllerService extends ChangeNotifier {
       // 桌面端：直接控制本地播放器
       if (PlatformUtils.isDesktop) {
         if (_isPlaying) {
-          await _audioPlayer.pause();
+          await _audioPlayer?.pause();
           Logger.debug('暂停播放', 'PlaybackController');
         } else {
           if (_currentPlayingSong != null) {
-            await _audioPlayer.resume();
+            await _audioPlayer?.resume();
             Logger.debug('继续播放', 'PlaybackController');
           } else {
             // 没有当前播放歌曲时，播放播放列表中的当前歌曲
@@ -361,7 +375,7 @@ class PlaybackControllerService extends ChangeNotifier {
   Future<void> pauseDirect() async {
     try {
       if (PlatformUtils.isDesktop) {
-        await _audioPlayer.pause();
+        await _audioPlayer?.pause();
         Logger.debug('强制暂停播放（桌面端）', 'PlaybackController');
       } else {
         final handler = AudioServiceManager.instance.audioHandler;
@@ -475,7 +489,7 @@ class PlaybackControllerService extends ChangeNotifier {
   Future<void> stop() async {
     try {
       if (PlatformUtils.isDesktop) {
-        await _audioPlayer.stop();
+        await _audioPlayer?.stop();
         _currentPlayingSong = null;
         _currentPosition = Duration.zero;
         _totalDuration = Duration.zero;
@@ -497,7 +511,7 @@ class PlaybackControllerService extends ChangeNotifier {
   Future<void> seekTo(Duration position) async {
     try {
       if (PlatformUtils.isDesktop) {
-        await _audioPlayer.seek(position);
+        await _audioPlayer?.seek(position);
         Logger.debug('跳转到位置: ${position.inSeconds}s', 'PlaybackController');
       } else {
         final handler = AudioServiceManager.instance.audioHandler;
@@ -521,7 +535,7 @@ class PlaybackControllerService extends ChangeNotifier {
       _volume = volume.clamp(0.0, 1.0);
 
       if (PlatformUtils.isDesktop) {
-        await _audioPlayer.setVolume(_volume);
+        await _audioPlayer?.setVolume(_volume);
         Logger.debug('设置音量: $_volume', 'PlaybackController');
       } else {
         final handler = AudioServiceManager.instance.audioHandler;
@@ -543,7 +557,7 @@ class PlaybackControllerService extends ChangeNotifier {
       _speed = speed.clamp(0.25, 3.0);
 
       if (PlatformUtils.isDesktop) {
-        await _audioPlayer.setSpeed(_speed);
+        await _audioPlayer?.setSpeed(_speed);
         Logger.debug('设置播放速度: $_speed', 'PlaybackController');
       } else {
         final handler = AudioServiceManager.instance.audioHandler;
@@ -573,8 +587,18 @@ class PlaybackControllerService extends ChangeNotifier {
     switch (_playlistManager.playMode) {
       case PlayMode.single:
         // 单曲循环：重新播放
-        _audioPlayer.seek(Duration.zero);
-        _audioPlayer.resume();
+        if (PlatformUtils.isDesktop) {
+          // 桌面端：使用本地播放器
+          _audioPlayer?.seek(Duration.zero);
+          _audioPlayer?.resume();
+        } else {
+          // 移动端：通过 AudioHandler 重新播放
+          final handler = AudioServiceManager.instance.audioHandler;
+          if (handler != null) {
+            handler.seek(Duration.zero);
+            handler.play();
+          }
+        }
         break;
         
       case PlayMode.sequence:
@@ -587,6 +611,16 @@ class PlaybackControllerService extends ChangeNotifier {
   
   /// 尝试播放下一首
   Future<void> _tryPlayNext() async {
+    if (!PlatformUtils.isDesktop) {
+      // 移动端：通过 AudioHandler 播放下一首
+      final handler = AudioServiceManager.instance.audioHandler;
+      if (handler != null) {
+        await handler.skipToNext();
+        return;
+      }
+    }
+    
+    // 桌面端：本地逻辑
     if (_playlistManager.moveToNext()) {
       await _playCurrentSong();
     } else {
@@ -666,7 +700,7 @@ class PlaybackControllerService extends ChangeNotifier {
 
     // 仅桌面端需要释放本地播放器
     if (PlatformUtils.isDesktop) {
-      _audioPlayer.dispose();
+      _audioPlayer?.dispose();
     }
 
     super.dispose();

@@ -8,6 +8,12 @@
 -keep class xyz.xdnm.beautifulaudio.** { *; }
 -dontwarn com.google.android.exoplayer2.**
 
+# Just Audio
+-keep class com.ryanheise.just_audio.** { *; }
+-keep class com.ryanheise.audio_session.** { *; }
+-dontwarn com.ryanheise.just_audio.**
+-dontwarn com.ryanheise.audio_session.**
+
 # Audio Metadata Reader
 -keep class org.jaudiotagger.** { *; }
 -dontwarn org.jaudiotagger.**

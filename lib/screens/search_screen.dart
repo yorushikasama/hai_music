@@ -199,16 +199,33 @@ class _SearchScreenState extends State<SearchScreen> {
       );
 
       if (mounted) {
-        setState(() {
-          _searchResults = results;
-          _isSearching = false;
-          // 如果结果数量等于pageSize，可能还有更多
-          // 如果少于pageSize，说明已经是全部结果
-          _hasMore = results.length >= _pageSize;
-        });
-        
-        // 保存搜索历史
-        _saveSearchHistory(_currentQuery);
+        results.when(
+          success: (songs) {
+            setState(() {
+              _searchResults = songs;
+              _isSearching = false;
+              // 如果结果数量等于pageSize，可能还有更多
+              // 如果少于pageSize，说明已经是全部结果
+              _hasMore = songs.length >= _pageSize;
+            });
+            
+            // 保存搜索历史
+            _saveSearchHistory(_currentQuery);
+          },
+          failure: (message, error) {
+            setState(() {
+              _searchResults = [];
+              _isSearching = false;
+              _hasMore = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('搜索失败: $message'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          },
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -246,12 +263,27 @@ class _SearchScreenState extends State<SearchScreen> {
       );
       
       if (mounted) {
-        setState(() {
-          _searchResults.addAll(results);
-          _currentPage = nextPage;
-          _hasMore = results.length >= _pageSize;
-          _isLoadingMore = false;
-        });
+        results.when(
+          success: (songs) {
+            setState(() {
+              _searchResults.addAll(songs);
+              _currentPage = nextPage;
+              _hasMore = songs.length >= _pageSize;
+              _isLoadingMore = false;
+            });
+          },
+          failure: (message, error) {
+            setState(() {
+              _isLoadingMore = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('加载更多失败: $message'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          },
+        );
       }
     } catch (e) {
       if (mounted) {
