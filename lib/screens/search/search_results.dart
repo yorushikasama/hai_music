@@ -118,7 +118,6 @@ class SearchResultsList extends StatelessWidget {
                     width: 56,
                     height: 56,
                     fit: BoxFit.cover,
-                    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                     placeholder: (context, url) => Container(
                       width: 56,
                       height: 56,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/logger.dart';
+import '../utils/format_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/playlist.dart';
@@ -381,7 +382,6 @@ if (_isLoading)
         decoration: BoxDecoration(
           color: colors.card,
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           border: Border.all(
             color: color.withValues(alpha: 0.3),
             width: 1,
@@ -402,7 +402,6 @@ if (_isLoading)
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -520,7 +519,6 @@ if (_isLoading)
           decoration: BoxDecoration(
             color: colors.card,
             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             border: Border.all(
               color: colors.border.withValues(alpha: 0.5),
               width: 1,
@@ -554,7 +552,6 @@ if (_isLoading)
                           ? CachedNetworkImage(
                               imageUrl: playlistData['coverUrl'],
                               fit: BoxFit.cover,
-                              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                               placeholder: (context, url) => Container(
                                 color: colors.card.withValues(alpha: 0.5),
                               ),
@@ -577,7 +574,6 @@ if (_isLoading)
                             ),
                       Container(
                         decoration: BoxDecoration(
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
@@ -596,7 +592,6 @@ if (_isLoading)
                             horizontal: 8,
                             vertical: 4,
                           ),
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(12),
@@ -673,7 +668,6 @@ if (_isLoading)
             labelText: 'QQ 号',
             labelStyle: TextStyle(color: colors.textSecondary),
             hintText: '请输入 QQ 号',
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             hintStyle: TextStyle(color: colors.textSecondary.withValues(alpha: 0.5)),
             enabledBorder: OutlineInputBorder(
               borderSide: BorderSide(color: colors.border),
@@ -763,9 +757,9 @@ if (_isLoading)
     navigator.pop();
 
     // 格式化大小
-    final totalSizeStr = cacheManager.formatSize(cacheInfo.totalSize);
-    final audioSizeStr = cacheManager.formatSize(cacheInfo.audioSize);
-    final coverSizeStr = cacheManager.formatSize(cacheInfo.coverSize);
+    final totalSizeStr = FormatUtils.formatSize(cacheInfo.totalSize);
+    final audioSizeStr = FormatUtils.formatSize(cacheInfo.audioSize);
+    final coverSizeStr = FormatUtils.formatSize(cacheInfo.coverSize);
 
     showDialog(
       context: context,
@@ -807,7 +801,7 @@ if (_isLoading)
             _buildCacheItem(
               icon: Icons.photo_library,
               label: '图片缓存',
-              size: cacheManager.formatSize(cacheInfo.imageSize),
+              size: FormatUtils.formatSize(cacheInfo.imageSize),
               colors: colors,
             ),
             if (cacheInfo.downloadSize > 0) ...[
@@ -815,7 +809,7 @@ if (_isLoading)
               _buildCacheItem(
                 icon: Icons.download,
                 label: '下载文件',
-                size: cacheManager.formatSize(cacheInfo.downloadSize),
+                size: FormatUtils.formatSize(cacheInfo.downloadSize),
                 colors: colors,
               ),
             ],

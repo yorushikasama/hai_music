@@ -76,7 +76,6 @@ class MobileAudioPlayer implements AudioPlayerInterface {
   Future<void> play(Song song) async {
     try {
       Logger.info('播放歌曲: ${song.title} - ${song.artist}', 'MobileAudioPlayer');
-      Logger.debug('播放链接: ${song.audioUrl.length > 100 ? "${song.audioUrl.substring(0, 100)}..." : song.audioUrl}', 'MobileAudioPlayer');
       
       if (song.audioUrl.isEmpty) {
         throw Exception('歌曲播放链接为空');
@@ -113,40 +112,36 @@ class MobileAudioPlayer implements AudioPlayerInterface {
   Future<void> pause() async {
     try {
       await _player.pause();
-      Logger.debug('暂停播放', 'MobileAudioPlayer');
     } catch (e) {
       Logger.error('暂停播放失败', e, null, 'MobileAudioPlayer');
       rethrow;
     }
   }
-  
+
   @override
   Future<void> resume() async {
     try {
       await _player.play();
-      Logger.debug('继续播放', 'MobileAudioPlayer');
     } catch (e) {
       Logger.error('继续播放失败', e, null, 'MobileAudioPlayer');
       rethrow;
     }
   }
-  
+
   @override
   Future<void> stop() async {
     try {
       await _player.stop();
-      Logger.debug('停止播放', 'MobileAudioPlayer');
     } catch (e) {
       Logger.error('停止播放失败', e, null, 'MobileAudioPlayer');
       rethrow;
     }
   }
-  
+
   @override
   Future<void> seek(Duration position) async {
     try {
       await _player.seek(position);
-      Logger.debug('跳转到位置: ${position.inSeconds}s', 'MobileAudioPlayer');
     } catch (e) {
       Logger.error('跳转失败', e, null, 'MobileAudioPlayer');
       rethrow;
@@ -158,19 +153,17 @@ class MobileAudioPlayer implements AudioPlayerInterface {
     try {
       _volume = volume.clamp(0.0, 1.0);
       await _player.setVolume(_volume);
-      Logger.debug('设置音量: $_volume', 'MobileAudioPlayer');
     } catch (e) {
       Logger.error('设置音量失败', e, null, 'MobileAudioPlayer');
       rethrow;
     }
   }
-  
+
   @override
   Future<void> setSpeed(double speed) async {
     try {
       _speed = speed.clamp(0.25, 3.0);
       await _player.setSpeed(_speed);
-      Logger.debug('设置播放速度: $_speed', 'MobileAudioPlayer');
     } catch (e) {
       Logger.error('设置播放速度失败', e, null, 'MobileAudioPlayer');
       rethrow;

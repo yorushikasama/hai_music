@@ -542,7 +542,6 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
           hintText: hint,
           helperText: helperText,
           helperMaxLines: 2,
-          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           helperStyle: TextStyle(
             color: colors.textSecondary.withValues(alpha: 0.7),
             fontSize: 12,
@@ -569,7 +568,6 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
       decoration: AppStyles.glassDecoration(
         color: colors.accent,
         opacity: 0.1,
-        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
         borderColor: colors.accent.withValues(alpha: 0.3),
         isLight: colors.isLight,
       ),

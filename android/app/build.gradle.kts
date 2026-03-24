@@ -37,6 +37,18 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // 配置APK文件名，包含应用名和版本号
+    applicationVariants.configureEach { 
+        outputs.configureEach { 
+            if (this is com.android.build.gradle.internal.api.ApkVariantOutputImpl) {
+                val appName = "hai_music"
+                val versionName = defaultConfig.versionName.get()
+                val versionCode = defaultConfig.versionCode.get()
+                outputFileName = "${appName}_v${versionName}_${versionCode}.apk"
+            }
+        }
+    }
 }
 
 flutter {

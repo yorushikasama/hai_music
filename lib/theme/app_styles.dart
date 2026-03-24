@@ -28,7 +28,6 @@ class AppStyles {
   static const double sidebarWidth = 240.0;
 
   // ============ 阴影（根据主题亮暗自动调整） ============
-  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
   static List<BoxShadow> getShadows(bool isLight) {
     return [
       BoxShadow(
@@ -45,7 +44,6 @@ class AppStyles {
   }
 
   // ============ 毛玻璃装饰生成器 ============
-  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
   static BoxDecoration glassDecoration({
     required Color color,
     required double opacity,

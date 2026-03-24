@@ -25,7 +25,6 @@ class PlaylistCard extends StatelessWidget {
       child: SizedBox(
         width: 180,
         child: Container(
-          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           decoration: BoxDecoration(
             color: colors.card,
             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
@@ -76,7 +75,6 @@ class PlaylistCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(

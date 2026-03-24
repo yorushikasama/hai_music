@@ -22,11 +22,51 @@ class LyricsService {
     if (client == null) return null;
     try {
       final data = await client
-          .from('song_lyrics')
-          .select('lyrics')
-          .eq('song_id', songId)
+          .from('favorite_songs')
+          .select('lyrics_lrc')
+          .eq('id', songId)
           .maybeSingle();
-      return data != null ? (data['lyrics'] as String?) : null;
+      return data != null ? (data['lyrics_lrc'] as String?) : null;
+    } catch (e) {
+      // 读取失败不抛出，返回空以便上层回退到API
+      return null;
+    }
+  }
+
+  /// 从数据库获取翻译
+  Future<String?> getTranslation(String songId) async {
+    final client = _clientOrNull;
+    if (client == null) return null;
+    try {
+      final data = await client
+          .from('favorite_songs')
+          .select('lyrics_translation')
+          .eq('id', songId)
+          .maybeSingle();
+      return data != null ? (data['lyrics_translation'] as String?) : null;
+    } catch (e) {
+      // 读取失败不抛出，返回空以便上层回退到API
+      return null;
+    }
+  }
+
+  /// 从数据库获取歌词和翻译
+  Future<Map<String, String?>?> getLyricsWithTranslation(String songId) async {
+    final client = _clientOrNull;
+    if (client == null) return null;
+    try {
+      final data = await client
+          .from('favorite_songs')
+          .select('lyrics_lrc, lyrics_translation')
+          .eq('id', songId)
+          .maybeSingle();
+      if (data != null) {
+        return {
+          'lrc': data['lyrics_lrc'] as String?,
+          'trans': data['lyrics_translation'] as String?,
+        };
+      }
+      return null;
     } catch (e) {
       // 读取失败不抛出，返回空以便上层回退到API
       return null;
@@ -39,17 +79,26 @@ class LyricsService {
     required String lyrics,
     String? title,
     String? artist,
+    String? translation,
   }) async {
     final client = _clientOrNull;
     if (client == null) return;
     try {
-      await client.from('song_lyrics').upsert({
-        'song_id': songId,
-        'lyrics': lyrics,
-        if (title != null) 'title': title,
-        if (artist != null) 'artist': artist,
+      final data = <String, dynamic>{
+        'lyrics_lrc': lyrics,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      };
+      if (translation != null && translation.isNotEmpty) {
+        data['lyrics_translation'] = translation;
+      }
+      if (title != null) {
+        data['title'] = title;
+      }
+      if (artist != null) {
+        data['artist'] = artist;
+      }
+      // 使用 id 字段作为 songId 的匹配条件
+      await client.from('favorite_songs').upsert({...data, 'id': songId});
     } catch (_) {
       // 忽略写入异常
     }

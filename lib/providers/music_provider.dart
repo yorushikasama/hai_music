@@ -24,8 +24,10 @@ class MusicProvider extends ChangeNotifier {
   late final SongUrlService _urlService;
   final PlayHistoryService _historyService = PlayHistoryService();
   final FavoriteManagerService _favoriteManager = FavoriteManagerService();
-  final PreferencesService _prefs = PreferencesService();
+  static final PreferencesService _prefs = PreferencesService();
   final SleepTimerService _sleepTimer = SleepTimerService();
+
+  bool _showLyricsTranslation = true;
   
   // 收藏功能
   final Set<String> _favoriteSongIds = <String>{};
@@ -41,6 +43,12 @@ class MusicProvider extends ChangeNotifier {
   MusicProvider() {
     _initializeServices();
     _loadFavorites();
+
+    try {
+      _showLyricsTranslation = _prefs.getShowLyricsTranslation();
+    } catch (_) {
+      _showLyricsTranslation = true;
+    }
   }
   
   /// 初始化服务
@@ -151,6 +159,8 @@ class MusicProvider extends ChangeNotifier {
   
   // 兼容性属性
   String get audioQuality => _prefs.getAudioQuality();
+
+  bool get showLyricsTranslation => _showLyricsTranslation;
   
   // ========== 播放控制方法 ==========
   
@@ -307,6 +317,16 @@ class MusicProvider extends ChangeNotifier {
     Logger.info('设置音质: $quality', 'MusicProvider');
     notifyListeners();
   }
+
+  Future<void> setShowLyricsTranslation(bool value) async {
+    _showLyricsTranslation = value;
+    try {
+      await _prefs.setShowLyricsTranslation(value);
+    } catch (_) {
+      // ignore
+    }
+    notifyListeners();
+  }
   
   // ========== 睡眠定时器 ==========
   
@@ -429,7 +449,6 @@ class MusicProvider extends ChangeNotifier {
     try {
       if (_playlistManager.isEmpty) {
         _prefs.clearLastSession();
-        Logger.debug('🧷 [Session] 播放列表为空，清除上次播放会话', 'MusicProvider');
         return;
       }
       
@@ -443,11 +462,6 @@ class MusicProvider extends ChangeNotifier {
         }
       }
 
-      Logger.debug(
-        '🧷 [Session] 准备保存会话: currentId=${current?.id}, playlistLen=${_playlistManager.length}, index=$currentIndex, position=${_playbackController.currentPosition.inSeconds}s',
-        'MusicProvider',
-      );
-
       final session = {
         'playlist': _playlistManager.playlist.map((s) => s.toJson()).toList(),
         'currentIndex': currentIndex,
@@ -456,12 +470,6 @@ class MusicProvider extends ChangeNotifier {
 
       final jsonStr = jsonEncode(session);
       _prefs.setLastSession(jsonStr);
-
-      final preview = jsonStr.length > 200 ? '${jsonStr.substring(0, 200)}...' : jsonStr;
-      Logger.debug(
-        '🧷 [Session] 已保存会话: jsonLen=${jsonStr.length}, preview=$preview',
-        'MusicProvider',
-      );
     } catch (e) {
       Logger.error('保存上次播放会话失败', e, null, 'MusicProvider');
     }
@@ -471,14 +479,8 @@ class MusicProvider extends ChangeNotifier {
     try {
       final sessionStr = _prefs.getLastSession();
       if (sessionStr.isEmpty) {
-        Logger.debug('🧷 [Session] 本地没有上次播放会话', 'MusicProvider');
         return;
       }
-
-      Logger.debug(
-        '🧷 [Session] 读取到会话字符串，长度=${sessionStr.length}',
-        'MusicProvider',
-      );
 
       final decoded = jsonDecode(sessionStr);
       if (decoded is! Map<String, dynamic>) {
@@ -524,10 +526,6 @@ class MusicProvider extends ChangeNotifier {
         final handler = AudioServiceManager.instance.audioHandler;
         if (handler != null) {
           final initialPosition = Duration(seconds: positionSeconds);
-          Logger.debug(
-            '🧷 [Session] 同步到 AudioHandler: startIndex=$startIndex, position=${initialPosition.inSeconds}s',
-            'MusicProvider',
-          );
           handler.updatePlaylist(
             songs,
             initialIndex: startIndex,
@@ -537,10 +535,6 @@ class MusicProvider extends ChangeNotifier {
       }
 
       Logger.info('恢复上次播放会话: ${songs.length} 首歌曲，索引: $startIndex, 位置: ${positionSeconds}s', 'MusicProvider');
-      Logger.debug(
-        '🧷 [Session] 恢复后 PlaylistManager 状态: ${_playlistManager.getPlaylistInfo()}',
-        'MusicProvider',
-      );
     } catch (e) {
       Logger.error('恢复上次播放会话失败', e, null, 'MusicProvider');
     }

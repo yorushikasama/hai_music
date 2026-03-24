@@ -3,6 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../utils/logger.dart';
+import '../utils/format_utils.dart';
 import 'smart_cache_service.dart';
 
 /// 缓存信息模型
@@ -69,13 +70,13 @@ class CacheManagerService {
     Logger.debug('🎵 [缓存管理器] 开始计算各类缓存大小...', 'CacheManager');
     
     final playCacheSize = await smartCache.getPlayCacheSize();
-    Logger.debug('🎵 [缓存管理器] 播放缓存大小: ${formatSize(playCacheSize)}', 'CacheManager');
-    
+    Logger.debug('🎵 [缓存管理器] 播放缓存大小: ${FormatUtils.formatSize(playCacheSize)}', 'CacheManager');
+
     final imageSize = await getImageCacheSize();
-    Logger.debug('🎵 [缓存管理器] 图片缓存大小: ${formatSize(imageSize)}', 'CacheManager');
-    
+    Logger.debug('🎵 [缓存管理器] 图片缓存大小: ${FormatUtils.formatSize(imageSize)}', 'CacheManager');
+
     final downloadSize = await getDownloadCacheSize();
-    Logger.debug('🎵 [缓存管理器] 下载文件大小: ${formatSize(downloadSize)}', 'CacheManager');
+    Logger.debug('🎵 [缓存管理器] 下载文件大小: ${FormatUtils.formatSize(downloadSize)}', 'CacheManager');
     
     final totalSize = playCacheSize + imageSize + downloadSize;
 
@@ -88,9 +89,9 @@ class CacheManagerService {
     );
 
     Logger.cache(
-      '缓存统计 - 播放: ${formatSize(playCacheSize)}, '
-      '图片: ${formatSize(imageSize)}, 下载: ${formatSize(downloadSize)}, '
-      '总计: ${formatSize(totalSize)}',
+      '缓存统计 - 播放: ${FormatUtils.formatSize(playCacheSize)}, '
+      '图片: ${FormatUtils.formatSize(imageSize)}, 下载: ${FormatUtils.formatSize(downloadSize)}, '
+      '总计: ${FormatUtils.formatSize(totalSize)}',
       'CacheManager',
     );
 
@@ -272,18 +273,5 @@ class CacheManagerService {
   void _invalidateCache() {
     _cachedInfo = null;
     Logger.cache('缓存信息已失效', 'CacheManager');
-  }
-
-  /// 格式化文件大小
-  String formatSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    } else if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(2)} KB';
-    } else if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
-    } else {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-    }
   }
 }

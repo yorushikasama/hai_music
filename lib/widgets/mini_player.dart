@@ -76,7 +76,6 @@ class MiniPlayer extends StatelessWidget {
                                 placeholder: (context, url) => Container(
                                   width: 56,
                                   height: 56,
-                                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                                   color: colors.card.withValues(alpha: 0.5),
                                 ),
                                 errorWidget: (context, url, error) => Container(
@@ -155,7 +154,6 @@ class MiniPlayer extends StatelessWidget {
                         activeTrackColor: colors.accent,
                         inactiveTrackColor: colors.border,
                         thumbColor: colors.accent,
-                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                         overlayColor: colors.accent.withValues(alpha: 0.2),
                       ),
                       child: Slider(
@@ -198,7 +196,6 @@ class MiniPlayer extends StatelessWidget {
               : Icons.favorite_border,
         ),
         iconSize: 28,
-        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
         color: musicProvider.isFavorite(songId)
             ? const Color(0xFF1DB954) // Spotify 绿色
             : colors.textSecondary.withValues(alpha: 0.7),
@@ -219,7 +216,6 @@ class MiniPlayer extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
-          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.2),
@@ -396,7 +392,6 @@ class MiniPlayer extends StatelessWidget {
                   child: Container(
                     width: 70, // 🔧 修复:增加宽度防止文本换行 (60 -> 70)
                     height: 240,
-                    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                     decoration: BoxDecoration(
                       color: colors.surface.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(16),
@@ -404,7 +399,6 @@ class MiniPlayer extends StatelessWidget {
                         color: colors.border,
                         width: 1,
                       ),
-                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.3),
@@ -451,7 +445,6 @@ class MiniPlayer extends StatelessWidget {
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
                                 activeTrackColor: colors.accent,
-                                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                                 inactiveTrackColor: colors.border.withValues(alpha: 0.3),
                                 thumbColor: Colors.white,
                                 overlayColor: colors.accent.withValues(alpha: 0.2),
@@ -470,7 +463,6 @@ class MiniPlayer extends StatelessWidget {
                         Container(
                           width: 42, // 🔧 修复:固定宽度防止 100% 时换行
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           decoration: BoxDecoration(
                             color: colors.accent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),

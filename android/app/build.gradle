@@ -4,23 +4,9 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
-}
-
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
-if (flutterVersionCode == null) {
-    flutterVersionCode = '1'
-}
-
-def flutterVersionName = localProperties.getProperty('flutter.versionName')
-if (flutterVersionName == null) {
-    flutterVersionName = '1.0'
-}
+// 使用 pubspec.yaml 中的版本信息
+def flutterVersionCode = 2
+def flutterVersionName = '1.0.1'
 
 android {
     namespace "com.example.hai_music"
@@ -46,11 +32,96 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        
+        multiDexEnabled false
+    }
+
+    // 构建优化配置
+    buildFeatures {
+        // 启用视图绑定（如果需要）
+        viewBinding false
+        // 启用数据绑定（如果需要）
+        dataBinding false
+    }
+
+    // 资源优化
+    aaptOptions {
+        cruncherEnabled = false
+    }
+
+    // 优化构建性能
+    compileOptions {
+        incremental true
+    }
+    
+    // 禁用不必要的构建功能
+    buildFeatures {
+        aidl false
+        renderScript false
+        shaders false
     }
 
     buildTypes {
         release {
             signingConfig signingConfigs.debug
+            // 启用 R8 压缩
+            minifyEnabled true
+            shrinkResources true
+            // 优化混淆规则
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            
+            // 启用 ZIP 对齐优化
+            zipAlignEnabled true
+            
+            // 优化构建性能
+            crunchPngs false
+        }
+    }
+    
+    // 自定义APK文件名，包含应用名和版本号
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "hai_music_v${defaultConfig.versionName}_${defaultConfig.versionCode}.apk"
+        }
+    }
+}
+
+// 并行执行任务
+tasks.whenTaskAdded { task ->
+    if (task.name.contains('lint') || task.name.contains('test')) {
+        task.enabled = false
+    }
+}
+
+// 构建完成后重命名APK文件
+tasks.register('renameApk', Copy) {
+    def versionName = project.android.defaultConfig.versionName
+    def versionCode = project.android.defaultConfig.versionCode
+    def apkDir = "${buildDir}/outputs/flutter-apk"
+    def oldName = "app-release.apk"
+    def newName = "hai_music_v${versionName}_${versionCode}.apk"
+    
+    from "${apkDir}/${oldName}"
+    into apkDir
+    rename oldName, newName
+    
+    dependsOn 'assembleRelease'
+    
+    doLast {
+        def oldFile = new File(apkDir, oldName)
+        if (oldFile.exists()) {
+            oldFile.delete()
+        }
+        println "APK文件已重命名为: ${newName}"
+    }
+}
+
+// 优化依赖解析
+configurations {
+    all {
+        resolutionStrategy {
+            cacheDynamicVersionsFor 10, 'minutes'
+            cacheChangingModulesFor 10, 'minutes'
         }
     }
 }
@@ -59,4 +130,8 @@ flutter {
     source '../..'
 }
 
-dependencies {}
+dependencies {
+    // 使用不需要 AGP 8.9.1+ 的稳定版本
+    implementation "androidx.browser:browser:1.8.0"
+    implementation "androidx.core:core-ktx:1.15.0"
+}

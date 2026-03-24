@@ -166,7 +166,6 @@ class _ThemeCard extends StatelessWidget {
           ),
           boxShadow: isSelected
               ? [
-                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   BoxShadow(
                     color: previewColors.accent.withValues(alpha: 0.3),
                     blurRadius: 12,

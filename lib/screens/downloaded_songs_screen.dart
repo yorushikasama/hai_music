@@ -13,6 +13,7 @@ import '../services/download_manager.dart';
 import '../services/local_audio_scanner.dart';
 import '../widgets/mini_player.dart';
 import '../utils/logger.dart';
+import '../utils/format_utils.dart';
 import 'downloaded/downloaded_header.dart';
 import 'downloaded/downloaded_songs_list.dart';
 
@@ -97,7 +98,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
     if (mounted) {
       setState(() {
         _downloadedSongs = songs;
-        _totalSize = _downloadService.formatSize(size);
+        _totalSize = FormatUtils.formatSize(size);
         _isLoading = false;
       });
     }

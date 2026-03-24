@@ -7,8 +7,8 @@ import 'preferences_cache_service.dart';
 /// 歌曲 URL 管理服务
 /// 负责获取和缓存歌曲播放链接
 class SongUrlService {
-  final MusicApiService _musicService = MusicApiService();
-  final PreferencesCacheService _cache = PreferencesCacheService();
+  static final MusicApiService _musicService = MusicApiService();
+  static final PreferencesCacheService _cache = PreferencesCacheService();
   
   // URL 缓存
   final Map<String, String> _urlCache = {};

@@ -48,7 +48,6 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   Icon(
                     Icons.article_outlined,
                     size: 80,
@@ -87,7 +86,6 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
               Color textColor = colors.textPrimary;
               Color bgColor = colors.surface;
 
-              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
               if (isError) {
                 textColor = Colors.red;
                 bgColor = Colors.red.withValues(alpha: 0.1);

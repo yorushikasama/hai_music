@@ -9,8 +9,8 @@ import '../utils/logger.dart';
 class MusicApiService {
   // API基础URL - 使用配置文件中的常量
   static const String _baseUrl = AppConstants.apiBaseUrl;
-  final _dioClient = DioClient();
-  final _prefsCache = PreferencesCacheService();
+  static final _dioClient = DioClient();
+  static final _prefsCache = PreferencesCacheService();
   
   /// 搜索歌曲（使用点歌API - 返回列表）
   /// 
@@ -142,6 +142,80 @@ class MusicApiService {
             await _prefsCache.setString(cacheKey, lyric);
             await _prefsCache.setInt(timestampKey, now);
             return lyric;
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, String?>?> getLyricsWithTranslation({
+    String? songId,
+    String? songMid,
+  }) async {
+    try {
+      String cacheKey;
+      String cacheKeyTrans;
+      String timestampKey;
+      if (songId != null && songId.isNotEmpty) {
+        cacheKey = 'lyric_$songId';
+        cacheKeyTrans = 'lyric_trans_$songId';
+        timestampKey = 'lyric_time_$songId';
+      } else if (songMid != null && songMid.isNotEmpty) {
+        cacheKey = 'lyric_mid_$songMid';
+        cacheKeyTrans = 'lyric_trans_mid_$songMid';
+        timestampKey = 'lyric_time_mid_$songMid';
+      } else {
+        return null;
+      }
+
+      await _prefsCache.init();
+      final cachedLyric = await _prefsCache.getString(cacheKey);
+      final cachedTrans = await _prefsCache.getString(cacheKeyTrans);
+      final cachedTimestamp = await _prefsCache.getInt(timestampKey) ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final cacheExpired = (now - cachedTimestamp) > 7 * 24 * 60 * 60 * 1000;
+
+      if (cachedLyric != null && cachedLyric.isNotEmpty && !cacheExpired) {
+        return {
+          'lrc': cachedLyric,
+          'trans': cachedTrans,
+        };
+      }
+
+      final queryParams = <String, dynamic>{};
+      if (songId != null && songId.isNotEmpty) {
+        queryParams['id'] = songId;
+      } else if (songMid != null && songMid.isNotEmpty) {
+        queryParams['mid'] = songMid;
+      }
+
+      final response = await _dioClient.get(
+        'https://api.vkeys.cn/v2/music/tencent/lyric',
+        queryParameters: queryParams,
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['code'] == 200 && data['data'] != null) {
+          final lyricData = data['data'];
+          final lrc = (lyricData['lrc'] as String?)?.trim();
+          final trans = (lyricData['trans'] as String?)?.trim();
+
+          if (lrc != null && lrc.isNotEmpty) {
+            await _prefsCache.setString(cacheKey, lrc);
+            if (trans != null && trans.isNotEmpty) {
+              await _prefsCache.setString(cacheKeyTrans, trans);
+            } else {
+              await _prefsCache.remove(cacheKeyTrans);
+            }
+            await _prefsCache.setInt(timestampKey, now);
+            return {
+              'lrc': lrc,
+              'trans': trans,
+            };
           }
         }
       }

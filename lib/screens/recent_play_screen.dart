@@ -82,7 +82,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
               right: 16,
               bottom: 16,
             ),
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             decoration: BoxDecoration(
               color: colors.surface.withValues(alpha: 0.95),
               boxShadow: [
@@ -211,7 +210,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
           Icon(
             Icons.history,
             size: 80,
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             color: colors.textSecondary.withValues(alpha: 0.5),
           ),
           SizedBox(height: AppStyles.spacingL),
@@ -244,7 +242,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             Icon(Icons.search_off, size: 64, color: colors.textSecondary.withValues(alpha: 0.5)),
             SizedBox(height: 16),
             Text(
@@ -278,7 +275,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
     MusicProvider musicProvider,
   ) {
     return Container(
-      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       decoration: BoxDecoration(
         color: isPlaying
             ? colors.accent.withValues(alpha: 0.08)
@@ -333,7 +329,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                         placeholder: (context, url) => Container(
                           width: 60,
                           height: 60,
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           color: colors.card.withValues(alpha: 0.3),
                           child: Icon(Icons.music_note, color: colors.textSecondary.withValues(alpha: 0.3)),
                         ),
@@ -348,7 +343,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                     if (isPlaying)
                       Positioned.fill(
                         child: Container(
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(12),
@@ -384,7 +378,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                         history.artist,
                         style: TextStyle(
                           fontSize: 13,
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           color: colors.textSecondary.withValues(alpha: 0.8),
                           height: 1.2,
                         ),
@@ -396,7 +389,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                         _formatPlayedTime(history.playedAt),
                         style: TextStyle(
                           fontSize: 11,
-                          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                           color: colors.textSecondary.withValues(alpha: 0.5),
                         ),
                       ),
@@ -406,7 +398,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                 SizedBox(width: 12),
                 // 删除按钮
                 IconButton(
-                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   icon: Icon(Icons.close, color: colors.textSecondary.withValues(alpha: 0.6), size: 20),
                   onPressed: () {
                     setState(() {

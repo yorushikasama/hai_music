@@ -373,6 +373,19 @@ class _MoreMenuSheet extends StatelessWidget {
                   showPlaylistDialog(rootContext, musicProvider);
                 },
               ),
+              SwitchListTile.adaptive(
+                secondary: const Icon(Icons.translate_rounded, color: Colors.white),
+                title: const Text(
+                  '显示歌词翻译',
+                  style: TextStyle(color: Colors.white),
+                ),
+                value: musicProvider.showLyricsTranslation,
+                activeTrackColor: Colors.orange.withValues(alpha: 0.5),
+                activeThumbColor: Colors.orange,
+                onChanged: (value) {
+                  musicProvider.setShowLyricsTranslation(value);
+                },
+              ),
               // 下载歌曲
               ListTile(
                 leading: const Icon(Icons.download_outlined, color: Colors.white),

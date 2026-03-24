@@ -188,13 +188,62 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
       Logger.error('🎵 [AudioHandler] 缓存歌曲失败: ${songWithUrl.title}', e, null, 'AudioHandler');
     });
 
+    // 预加载下一首歌曲
+    _preloadNextSong();
+
     _broadcastState();
+  }
+
+  /// 预加载下一首歌曲
+  void _preloadNextSong() {
+    final nextIndex = _getNextIndex();
+    if (nextIndex != null && nextIndex < _queue.length) {
+      final nextItem = _queue[nextIndex];
+      final nextSong = _mediaItemToSong(nextItem);
+
+      // 检查是否已经有音频链接
+      if (nextSong.audioUrl.isEmpty) {
+        Logger.info('🎵 [AudioHandler] 开始预加载下一首歌曲: ${nextSong.title}', 'AudioHandler');
+        
+        // 异步预加载，不阻塞当前播放
+        Future.microtask(() async {
+          try {
+            // 获取播放链接
+            final audioUrl = await _urlService.getSongUrl(nextSong);
+            if (audioUrl != null && audioUrl.isNotEmpty) {
+              // 构造带 URL 的 Song
+              final songWithUrl = Song(
+                id: nextSong.id,
+                title: nextSong.title,
+                artist: nextSong.artist,
+                album: nextSong.album,
+                duration: nextSong.duration,
+                coverUrl: nextSong.coverUrl,
+                audioUrl: audioUrl,
+                platform: nextSong.platform,
+                r2CoverUrl: nextSong.r2CoverUrl,
+                lyricsLrc: nextSong.lyricsLrc,
+              );
+
+              // 用带 URL 的 Song 更新队列中的 MediaItem
+              final updatedItem = _songToMediaItem(songWithUrl);
+              _queue[nextIndex] = updatedItem;
+
+              // 更新队列流
+              queue.add(List.unmodifiable(_queue));
+
+              Logger.success('🎵 [AudioHandler] 预加载完成: ${songWithUrl.title}', 'AudioHandler');
+            }
+          } catch (e) {
+            Logger.error('🎵 [AudioHandler] 预加载失败: ${nextSong.title}', e, null, 'AudioHandler');
+          }
+        });
+      }
+    }
   }
   
   /// 更新媒体项（供外部调用）
   void updateCurrentMediaItem(MediaItem item) {
-    Logger.debug('🎵 开始更新媒体项: ${item.title}', 'AudioHandler');
-    
     // 检查是否已在队列中
     final existingIndex = _queue.indexWhere((m) => m.id == item.id);
     if (existingIndex >= 0) {
@@ -202,15 +251,13 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
       _queue[existingIndex] = item;
       if (_currentIndex == existingIndex) {
         mediaItem.add(item);
-        Logger.debug('📱 更新当前播放的媒体项', 'AudioHandler');
-      }
+        }
     } else {
       // 添加新项并设为当前
       _queue.add(item);
       _currentIndex = _queue.length - 1;
       mediaItem.add(item);
-      Logger.debug('📱 添加新的媒体项到队列', 'AudioHandler');
-    }
+      }
     
     // 更新队列
     queue.add(_queue);
@@ -532,8 +579,7 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
     );
     
     playbackState.add(playbackStateObj);
-    Logger.debug('✅ 播放状态已广播: controls=${playbackStateObj.controls.length}, playing=$playing', 'AudioHandler');
-  }
+    }
   
   /// 获取处理状态
   AudioProcessingState _getProcessingState() {

@@ -263,8 +263,6 @@ class PlaybackControllerService extends ChangeNotifier {
       return;
     }
     
-    Logger.debug('🎵 开始播放当前歌曲: ${currentSong.title}', 'PlaybackController');
-    
     _playRequestVersion++;
     final currentVersion = _playRequestVersion;
     
@@ -301,7 +299,6 @@ class PlaybackControllerService extends ChangeNotifier {
       });
       
       // 更新系统媒体通知 (仅移动端)
-      Logger.debug('🔄 准备更新系统媒体通知...', 'PlaybackController');
       await _updateMediaItem(songWithUrl);
       
       Logger.success('播放成功: ${currentSong.title}', 'PlaybackController');
@@ -618,17 +615,12 @@ class PlaybackControllerService extends ChangeNotifier {
   Future<void> _updateMediaItem(Song song) async {
     // 仅在移动端更新媒体通知
     if (PlatformUtils.isDesktop) {
-      Logger.debug('🖥️ 桌面端，跳过媒体通知更新', 'PlaybackController');
       return;
     }
     
     try {
       final audioServiceManager = AudioServiceManager.instance;
-      Logger.debug('🔍 检查 AudioService 可用性...', 'PlaybackController');
-      
       if (audioServiceManager.isAvailable) {
-        Logger.debug('✅ AudioService 可用，创建 MediaItem...', 'PlaybackController');
-        
         final mediaItem = MediaItem(
           id: song.id,
           album: song.album,
@@ -642,17 +634,13 @@ class PlaybackControllerService extends ChangeNotifier {
           },
         );
         
-        Logger.debug('📱 MediaItem 创建完成: ${mediaItem.title} - ${mediaItem.artist}', 'PlaybackController');
-        Logger.debug('🎨 封面URL: ${mediaItem.artUri}', 'PlaybackController');
-        
         // 通过 AudioServiceManager 更新媒体项
         audioServiceManager.updateMediaItem(mediaItem);
         
         Logger.success('✅ 系统媒体通知已更新: ${song.title}', 'PlaybackController');
       } else {
         Logger.warning('⚠️ AudioService 不可用，跳过媒体通知更新', 'PlaybackController');
-        Logger.debug('🔍 AudioService 状态: handler=${audioServiceManager.audioHandler != null}', 'PlaybackController');
-      }
+        }
     } catch (e, stackTrace) {
       Logger.error('❌ 更新媒体通知失败', e, stackTrace, 'PlaybackController');
     }

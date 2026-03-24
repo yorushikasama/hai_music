@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../utils/logger.dart';
 
 /// Dio 客户端单例
 /// 提供统一的网络请求配置和拦截器
@@ -7,6 +8,9 @@ class DioClient {
   late final Dio dio;
 
   factory DioClient() => _instance;
+
+  // 用于测试的getter
+  Dio get dioInstance => dio;
 
   DioClient._internal() {
     dio = Dio(BaseOptions(
@@ -18,42 +22,102 @@ class DioClient {
       },
     ));
 
-    // 可以在这里添加拦截器用于日志记录、错误处理等
+    // 添加响应拦截器
+    dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        Logger.debug('发送请求: ${options.uri}', 'DioClient');
+        return handler.next(options);
+      },
+      onResponse: (response, handler) {
+        Logger.debug('收到响应: ${response.statusCode}', 'DioClient');
+        return handler.next(response);
+      },
+      onError: (DioError e, handler) {
+        Logger.error('网络请求错误', e, null, 'DioClient');
+        return handler.next(e);
+      },
+    ));
   }
 
   /// GET 请求
   Future<Response> get(
-    String url, {
-    Map<String, dynamic>? queryParameters,
-    Options? options,
-  }) async {
-    try {
-      return await dio.get(
-        url,
-        queryParameters: queryParameters,
-        options: options,
-      );
-    } catch (e) {
-      rethrow;
+    String url,
+    {
+      Map<String, dynamic>? queryParameters,
+      Options? options,
+      int retryCount = 3,
+      Duration retryDelay = const Duration(milliseconds: 1000),
     }
+  ) async {
+    int attempts = 0;
+    while (attempts < retryCount) {
+      try {
+        attempts++;
+        return await dio.get(
+          url,
+          queryParameters: queryParameters,
+          options: options,
+        );
+      } catch (e) {
+        if (e is DioError) {
+          // 只对网络错误进行重试
+          if (e.type == DioErrorType.connectionTimeout ||
+              e.type == DioErrorType.receiveTimeout ||
+              e.type == DioErrorType.sendTimeout ||
+              e.type == DioErrorType.unknown) {
+            if (attempts < retryCount) {
+              Logger.warning('网络请求失败，正在重试 ($attempts/$retryCount)...', 'DioClient');
+              await Future.delayed(retryDelay);
+              continue;
+            }
+          }
+        }
+        rethrow;
+      }
+    }
+    // 理论上不会到达这里，但为了类型安全
+    throw Exception('网络请求失败');
   }
 
   /// POST 请求
   Future<Response> post(
-    String url, {
-    dynamic data,
-    Map<String, dynamic>? queryParameters,
-    Options? options,
-  }) async {
-    try {
-      return await dio.post(
-        url,
-        data: data,
-        queryParameters: queryParameters,
-        options: options,
-      );
-    } catch (e) {
-      rethrow;
+    String url,
+    {
+      dynamic data,
+      Map<String, dynamic>? queryParameters,
+      Options? options,
+      int retryCount = 3,
+      Duration retryDelay = const Duration(milliseconds: 1000),
     }
+  ) async {
+    int attempts = 0;
+    while (attempts < retryCount) {
+      try {
+        attempts++;
+        return await dio.post(
+          url,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+        );
+      } catch (e) {
+        if (e is DioError) {
+          // 只对网络错误进行重试
+          if (e.type == DioErrorType.connectionTimeout ||
+              e.type == DioErrorType.receiveTimeout ||
+              e.type == DioErrorType.sendTimeout ||
+              e.type == DioErrorType.unknown) {
+            if (attempts < retryCount) {
+              Logger.warning('网络请求失败，正在重试 ($attempts/$retryCount)...', 'DioClient');
+              await Future.delayed(retryDelay);
+              continue;
+            }
+          }
+        }
+        rethrow;
+      }
+    }
+    // 理论上不会到达这里，但为了类型安全
+    throw Exception('网络请求失败');
   }
 }

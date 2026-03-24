@@ -9,7 +9,7 @@ import 'services/preferences_service.dart';
 import 'services/audio_handler_service.dart';
 import 'services/audio_service_manager.dart';
 import 'utils/platform_utils.dart';
-import 'window_config_desktop.dart' if (dart.library.html) 'window_config_web.dart';
+import 'window_config.dart';
 
 void main() async {
   // 确保 Flutter 绑定初始化
@@ -50,9 +50,15 @@ void main() async {
   // 初始化主题
   final themeProvider = ThemeProvider();
   await themeProvider.loadTheme();
-  
-  runApp(MyApp(themeProvider: themeProvider));
-  
+
+  // 初始化音乐提供者
+  final musicProvider = MusicProvider();
+
+  runApp(MyApp(
+    themeProvider: themeProvider,
+    musicProvider: musicProvider,
+  ));
+
   // 只在桌面平台配置窗口
   if (PlatformUtils.isDesktop) {
     configureWindow();
@@ -61,15 +67,16 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   final ThemeProvider themeProvider;
-  
-  const MyApp({super.key, required this.themeProvider});
+  final MusicProvider musicProvider;
+
+  const MyApp({super.key, required this.themeProvider, required this.musicProvider});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => MusicProvider()),
         ChangeNotifierProvider.value(value: themeProvider),
+        ChangeNotifierProvider.value(value: musicProvider),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {

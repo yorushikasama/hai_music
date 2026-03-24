@@ -1,17 +1,17 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:math' as math;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/song.dart';
 import '../utils/logger.dart';
+import '../utils/format_utils.dart';
 import '../config/app_constants.dart';
 import 'music_api_service.dart';
 
 /// 智能缓存服务
-/// 自动缓存最近播放的歌曲，支持 LRU 清理策略
+/// 自动缓存最近播放的歌曲，支持 LRU 清理策略和缓存过期管理
 class SmartCacheService {
   static final SmartCacheService _instance = SmartCacheService._internal();
   factory SmartCacheService() => _instance;
@@ -24,50 +24,38 @@ class SmartCacheService {
   // 缓存配置
   static const int maxPlayCacheCount = 50; // 最多缓存 50 首歌
   static const int maxPlayCacheSize = 500 * 1024 * 1024; // 最大 500MB
+  static const int cacheExpiryDays = 7; // 缓存过期时间（天）
   static const String playCacheKey = 'play_cache_list';
 
   /// 播放歌曲时自动缓存
   Future<void> cacheOnPlay(Song song, {int? audioQuality}) async {
     try {
-      Logger.info('🎵 [缓存] 开始缓存播放歌曲: ${song.title} (ID: ${song.id})', 'SmartCache');
-      Logger.debug('🎵 [缓存] 歌曲信息 - 标题: ${song.title}, 艺术家: ${song.artist}, audioUrl: ${song.audioUrl.isNotEmpty ? "有" : "无"}', 'SmartCache');
-      
       // 1. 检查是否已缓存
       final cacheFile = await _getPlayCacheFile(song.id);
-      Logger.debug('🎵 [缓存] 缓存文件路径: ${cacheFile.path}', 'SmartCache');
-      
       if (await cacheFile.exists()) {
-        final fileSize = await cacheFile.length();
-        Logger.info('🎵 [缓存] 歌曲已缓存 (${formatSize(fileSize)})，更新访问时间', 'SmartCache');
         await _updateAccessTime(song.id);
         return;
       }
 
-      Logger.info('🎵 [缓存] 歌曲未缓存，开始下载...', 'SmartCache');
-
       // 2. 检查缓存空间
-      Logger.debug('🎵 [缓存] 检查缓存空间...', 'SmartCache');
       await _ensureCacheSpace();
 
       // 3. 下载并缓存
-      Logger.info('🎵 [缓存] 开始下载音频文件...', 'SmartCache');
       await _downloadToPlayCache(song, audioQuality: audioQuality);
 
       // 4. 验证下载结果
       if (await cacheFile.exists()) {
         final fileSize = await cacheFile.length();
-        Logger.success('🎵 [缓存] 音频文件下载成功: ${formatSize(fileSize)}', 'SmartCache');
+        Logger.info('🎵 [缓存] 音频文件缓存成功: ${song.title} (${FormatUtils.formatSize(fileSize)})', 'SmartCache');
       } else {
         Logger.error('🎵 [缓存] 音频文件下载失败: 文件不存在', null, null, 'SmartCache');
         return;
       }
 
       // 5. 更新缓存列表
-      Logger.debug('🎵 [缓存] 更新缓存列表...', 'SmartCache');
       await _addToCacheList(song);
 
-      Logger.success('🎵 [缓存] 歌曲缓存完成: ${song.title}', 'SmartCache');
-    } catch (e, stackTrace) {
+      } catch (e, stackTrace) {
       Logger.error('🎵 [缓存] 缓存歌曲失败: ${song.title}', e, stackTrace, 'SmartCache');
     }
   }
@@ -77,6 +65,12 @@ class SmartCacheService {
     try {
       final playFile = await _getPlayCacheFile(songId);
       if (await playFile.exists()) {
+        // 检查缓存是否过期
+        if (await _isCacheExpired(songId)) {
+          Logger.info('🎵 [缓存] 缓存已过期，删除: $songId', 'SmartCache');
+          await _removeCacheItem(songId);
+          return null;
+        }
         await _updateAccessTime(songId);
         return playFile.path;
       }
@@ -105,26 +99,18 @@ class SmartCacheService {
   /// 下载音频文件
   Future<void> _downloadAudio(Song song, String filePath, {int? audioQuality}) async {
     String? audioUrl = song.audioUrl;
-    Logger.debug('🎵 [下载] 检查音频URL - 原始URL: ${audioUrl.isNotEmpty ? "有(${audioUrl.length}字符)" : "无"}', 'SmartCache');
-    
     if (audioUrl.isEmpty) {
       final quality = audioQuality ?? AppConstants.qualityHigh;
-      Logger.info('🎵 [下载] 获取音频URL - 歌曲ID: ${song.id}, 音质: $quality', 'SmartCache');
       audioUrl = await _apiService.getSongUrl(songId: song.id, quality: quality);
-      Logger.debug('🎵 [下载] API返回URL: ${audioUrl?.isNotEmpty == true ? "有(${audioUrl!.length}字符)" : "无"}', 'SmartCache');
-    }
+      }
 
     if (audioUrl == null || audioUrl.isEmpty) {
       throw Exception('无法获取音频URL - songId: ${song.id}');
     }
 
-    Logger.info('🎵 [下载] 开始下载音频: ${song.title} -> $filePath', 'SmartCache');
-    Logger.debug('🎵 [下载] 下载URL: ${audioUrl.substring(0, math.min(100, audioUrl.length))}...', 'SmartCache');
-    
     try {
       await _dio.download(audioUrl, filePath);
-      Logger.success('🎵 [下载] 下载完成: ${song.title}', 'SmartCache');
-    } catch (e) {
+      } catch (e) {
       Logger.error('🎵 [下载] 下载失败: ${song.title}', e, null, 'SmartCache');
       rethrow;
     }
@@ -132,6 +118,9 @@ class SmartCacheService {
 
   /// 确保缓存空间足够
   Future<void> _ensureCacheSpace() async {
+    // 先清理过期缓存
+    await _cleanExpiredCache();
+    
     final cacheList = await _getCacheList();
     
     // 检查数量限制
@@ -144,6 +133,53 @@ class SmartCacheService {
     if (cacheSize > maxPlayCacheSize) {
       await _cleanOldCache(5); // 清理 5 个最旧的
     }
+  }
+
+  /// 清理过期缓存
+  Future<void> _cleanExpiredCache() async {
+    final cacheList = await _getCacheList();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final expiryTime = cacheExpiryDays * 24 * 60 * 60 * 1000;
+    
+    final expiredItems = cacheList.where((item) {
+      final cacheTime = item['cacheTime'] as int;
+      return now - cacheTime > expiryTime;
+    }).toList();
+    
+    for (final item in expiredItems) {
+      final songId = item['songId'];
+      try {
+        final file = await _getPlayCacheFile(songId);
+        if (await file.exists()) {
+          await file.delete();
+          Logger.info('清理过期缓存: $songId', 'SmartCache');
+        }
+      } catch (e) {
+        Logger.warning('清理过期缓存失败: $songId', 'SmartCache');
+      }
+    }
+    
+    // 移除过期记录
+    cacheList.removeWhere((item) {
+      final cacheTime = item['cacheTime'] as int;
+      return now - cacheTime > expiryTime;
+    });
+    
+    await _saveCacheList(cacheList);
+  }
+
+  /// 检查缓存是否过期
+  Future<bool> _isCacheExpired(String songId) async {
+    final cacheList = await _getCacheList();
+    final item = cacheList.firstWhere((item) => item['songId'] == songId, orElse: () => {});
+    
+    if (item.isEmpty) return true;
+    
+    final cacheTime = item['cacheTime'] as int;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final expiryTime = cacheExpiryDays * 24 * 60 * 60 * 1000;
+    
+    return now - cacheTime > expiryTime;
   }
 
   /// 清理旧缓存
@@ -171,6 +207,22 @@ class SmartCacheService {
     // 更新缓存列表
     cacheList.removeRange(0, count);
     await _saveCacheList(cacheList);
+  }
+
+  /// 移除单个缓存项
+  Future<void> _removeCacheItem(String songId) async {
+    try {
+      final file = await _getPlayCacheFile(songId);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      
+      final cacheList = await _getCacheList();
+      cacheList.removeWhere((item) => item['songId'] == songId);
+      await _saveCacheList(cacheList);
+    } catch (e) {
+      Logger.error('移除缓存项失败: $songId', e, null, 'SmartCache');
+    }
   }
 
   /// 初始化 SharedPreferences
@@ -243,25 +295,18 @@ class SmartCacheService {
       final dir = await getApplicationDocumentsDirectory();
       final cacheDir = Directory(path.join(dir.path, 'music', 'play_cache'));
       
-      Logger.debug('🎵 [统计] 检查缓存目录: ${cacheDir.path}', 'SmartCache');
-      
       if (!await cacheDir.exists()) {
-        Logger.debug('🎵 [统计] 缓存目录不存在，返回大小 0', 'SmartCache');
         return 0;
       }
 
       int totalSize = 0;
-      int fileCount = 0;
       await for (var entity in cacheDir.list()) {
         if (entity is File) {
           final fileSize = await entity.length();
           totalSize += fileSize;
-          fileCount++;
-          Logger.debug('🎵 [统计] 缓存文件: ${path.basename(entity.path)} - ${formatSize(fileSize)}', 'SmartCache');
-        }
+          }
       }
       
-      Logger.info('🎵 [统计] 播放缓存统计: $fileCount 个文件, 总大小: ${formatSize(totalSize)}', 'SmartCache');
       return totalSize;
     } catch (e) {
       Logger.error('🎵 [统计] 获取缓存大小失败', e, null, 'SmartCache');
@@ -289,26 +334,59 @@ class SmartCacheService {
     }
   }
 
+  /// 清理指定歌曲的缓存
+  Future<bool> clearSongCache(String songId) async {
+    try {
+      await _removeCacheItem(songId);
+      Logger.success('清理歌曲缓存完成: $songId', 'SmartCache');
+      return true;
+    } catch (e) {
+      Logger.error('清理歌曲缓存失败: $songId', e, null, 'SmartCache');
+      return false;
+    }
+  }
+
   /// 获取缓存统计信息
   Future<Map<String, dynamic>> getCacheStats() async {
     final playSize = await _getPlayCacheSize();
     final cacheList = await _getCacheList();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final expiryTime = cacheExpiryDays * 24 * 60 * 60 * 1000;
+    
+    // 统计过期缓存数量
+    final expiredCount = cacheList.where((item) {
+      final cacheTime = item['cacheTime'] as int;
+      return now - cacheTime > expiryTime;
+    }).length;
     
     return {
       'playCache': {
         'size': playSize,
         'count': cacheList.length,
+        'expiredCount': expiredCount,
         'maxCount': maxPlayCacheCount,
         'maxSize': maxPlayCacheSize,
+        'expiryDays': cacheExpiryDays,
       },
     };
   }
 
-  /// 格式化文件大小
-  String formatSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(2)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  /// 优化缓存（清理过期和不必要的缓存）
+  Future<void> optimizeCache() async {
+    try {
+      Logger.info('开始优化缓存...', 'SmartCache');
+      
+      // 清理过期缓存
+      await _cleanExpiredCache();
+      
+      // 确保缓存空间
+      await _ensureCacheSpace();
+      
+      final stats = await getCacheStats();
+      Logger.success('缓存优化完成', 'SmartCache');
+      Logger.info('缓存统计: ${stats['playCache']}', 'SmartCache');
+    } catch (e) {
+      Logger.error('缓存优化失败', e, null, 'SmartCache');
+    }
   }
 }

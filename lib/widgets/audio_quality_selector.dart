@@ -75,7 +75,6 @@ class AudioQualitySelector extends StatelessWidget {
                 leading: Container(
                   width: 48,
                   height: 48,
-                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   decoration: BoxDecoration(
                     color: isSelected
                         ? colors.accent.withValues(alpha: 0.15)
@@ -105,7 +104,6 @@ class AudioQualitySelector extends StatelessWidget {
                           horizontal: 6,
                           vertical: 2,
                         ),
-                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                         decoration: BoxDecoration(
                           color: colors.accent.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),

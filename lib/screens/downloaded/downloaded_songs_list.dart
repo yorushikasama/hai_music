@@ -8,6 +8,7 @@ import '../../models/downloaded_song.dart';
 import '../../providers/music_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_styles.dart';
+import '../../extensions/duration_extension.dart';
 
 /// 下载页面的歌曲列表区域（含多选支持）
 class DownloadedSongsListSection extends StatelessWidget {
@@ -228,7 +229,7 @@ class _DownloadedSongTile extends StatelessWidget {
                 // 时长
                 if (downloadedSong.duration != null)
                   Text(
-                    _formatDuration(downloadedSong.duration!),
+                    Duration(seconds: downloadedSong.duration!).toMinutesSeconds(),
                     style: TextStyle(
                       fontSize: 13,
                       color: colors.textSecondary.withValues(alpha: 0.6),
@@ -288,11 +289,4 @@ Widget _buildCoverPlaceholder(ThemeColors colors, String? networkUrl) {
     color: colors.card.withValues(alpha: 0.3),
     child: Icon(Icons.music_note, color: colors.textSecondary),
   );
-}
-
-String _formatDuration(int durationSeconds) {
-  String twoDigits(int n) => n.toString().padLeft(2, '0');
-  final minutes = twoDigits((durationSeconds ~/ 60) % 60);
-  final seconds = twoDigits(durationSeconds % 60);
-  return '$minutes:$seconds';
 }

@@ -35,16 +35,14 @@ class DesktopAudioPlayer implements AudioPlayerInterface {
     _subscriptions.add(_player.onPlayerStateChanged.listen((state) {
       final wasPlaying = _isPlaying;
       _isPlaying = state == PlayerState.playing;
-      
+
       if (wasPlaying != _isPlaying) {
         _playingController.add(_isPlaying);
-        Logger.debug('播放状态变化: $_isPlaying', 'DesktopAudioPlayer');
       }
-      
+
       // 播放完成处理
       if (state == PlayerState.completed) {
         _completionController.add(null);
-        Logger.debug('播放完成', 'DesktopAudioPlayer');
       }
     }));
     
@@ -122,31 +120,28 @@ class DesktopAudioPlayer implements AudioPlayerInterface {
   Future<void> pause() async {
     try {
       await _player.pause();
-      Logger.debug('暂停播放', 'DesktopAudioPlayer');
     } catch (e) {
       Logger.error('暂停播放失败', e, null, 'DesktopAudioPlayer');
       rethrow;
     }
   }
-  
+
   @override
   Future<void> resume() async {
     try {
       await _player.resume();
-      Logger.debug('继续播放', 'DesktopAudioPlayer');
     } catch (e) {
       Logger.error('继续播放失败', e, null, 'DesktopAudioPlayer');
       rethrow;
     }
   }
-  
+
   @override
   Future<void> stop() async {
     try {
       await _player.stop();
       _position = Duration.zero;
       _duration = null;
-      Logger.debug('停止播放', 'DesktopAudioPlayer');
     } catch (e) {
       Logger.error('停止播放失败', e, null, 'DesktopAudioPlayer');
       rethrow;
@@ -157,19 +152,17 @@ class DesktopAudioPlayer implements AudioPlayerInterface {
   Future<void> seek(Duration position) async {
     try {
       await _player.seek(position);
-      Logger.debug('跳转到位置: ${position.inSeconds}s', 'DesktopAudioPlayer');
     } catch (e) {
       Logger.error('跳转失败', e, null, 'DesktopAudioPlayer');
       rethrow;
     }
   }
-  
+
   @override
   Future<void> setVolume(double volume) async {
     try {
       _volume = volume.clamp(0.0, 1.0);
       await _player.setVolume(_volume);
-      Logger.debug('设置音量: $_volume', 'DesktopAudioPlayer');
     } catch (e) {
       Logger.error('设置音量失败', e, null, 'DesktopAudioPlayer');
       rethrow;
@@ -181,7 +174,6 @@ class DesktopAudioPlayer implements AudioPlayerInterface {
     try {
       _speed = speed.clamp(0.25, 3.0);
       await _player.setPlaybackRate(_speed);
-      Logger.debug('设置播放速度: $_speed', 'DesktopAudioPlayer');
     } catch (e) {
       Logger.error('设置播放速度失败', e, null, 'DesktopAudioPlayer');
       rethrow;

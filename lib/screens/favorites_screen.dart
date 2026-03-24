@@ -8,6 +8,7 @@ import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
 import '../extensions/favorite_song_extension.dart';
+import '../extensions/duration_extension.dart';
 import '../widgets/mini_player.dart';
 import '../services/download_manager.dart';
 import 'download_progress_screen.dart';
@@ -96,7 +97,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             physics: AlwaysScrollableScrollPhysics(), // 强制启用滚动
             slivers: [
               // 顶部导航栏
-              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             SliverAppBar(
                 pinned: true,
                 backgroundColor: colors.surface.withValues(alpha: 0.95),
@@ -307,7 +307,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           Icon(
             isSearchEmpty ? Icons.search_off : Icons.favorite_border,
             size: 80,
@@ -369,7 +368,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   ) {
     final isSelected = _selectedIds.contains(favorite.id);
     return Container(
-      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
     decoration: BoxDecoration(
         color: isPlaying
             ? colors.accent.withValues(alpha: 0.08)
@@ -442,7 +440,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
-                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                         placeholder: (context, url) => Container(
                           width: 60,
                           height: 60,
@@ -459,7 +456,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     ),
                     if (isPlaying)
                       Positioned.fill(
-                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.6),
@@ -494,7 +490,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       SizedBox(height: 4),
                       Text(
                         favorite.artist,
-                        // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       style: TextStyle(
                           fontSize: 13,
                           color: colors.textSecondary.withValues(alpha: 0.8),
@@ -509,8 +504,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 SizedBox(width: 12),
                 // 时长
                 Text(
-                  _formatDuration(favorite.duration),
-                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
+                  Duration(seconds: favorite.duration!).toMinutesSeconds(),
                 style: TextStyle(
                     fontSize: 13,
                     color: colors.textSecondary.withValues(alpha: 0.6),
@@ -521,7 +515,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   SizedBox(width: 8),
                   // 收藏按钮
                   Container(
-                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                 decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.red.withValues(alpha: 0.1),
@@ -582,14 +575,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         ),
       ),
     );
-  }
-
-  String _formatDuration(int? durationSeconds) {
-    if (durationSeconds == null) return '00:00';
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final minutes = twoDigits((durationSeconds ~/ 60) % 60);
-    final seconds = twoDigits(durationSeconds % 60);
-    return '$minutes:$seconds';
   }
 
   /// 批量下载

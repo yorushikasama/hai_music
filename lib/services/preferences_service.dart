@@ -68,6 +68,16 @@ class PreferencesService {
     return _prefs.getString('theme_mode') ?? 'system';
   }
 
+  // ==================== 歌词设置 ====================
+
+  Future<bool> setShowLyricsTranslation(bool value) async {
+    return await _prefs.setBool('show_lyrics_translation', value);
+  }
+
+  bool getShowLyricsTranslation() {
+    return _prefs.getBool('show_lyrics_translation') ?? true;
+  }
+
   // ==================== 搜索历史 ====================
   
   /// 保存搜索历史

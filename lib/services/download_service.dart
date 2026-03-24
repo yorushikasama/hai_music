@@ -130,35 +130,54 @@ class DownloadService {
 
       // 下载歌词（可选）
       String? localLyricsPath;
+      String? localTransPath;
       try {
-        // 1. 优先使用 Song 对象中的歌词
+        // 1. 优先使用 Song 对象中的歌词和翻译
         String? lyrics = song.lyricsLrc;
-        
+        String? translation = song.lyricsTrans;
+
         // 2. 如果没有，从数据库获取
         if (lyrics == null || lyrics.isEmpty) {
-          lyrics = await _lyricsService.getLyrics(song.id);
-        }
-        
-        // 3. 如果还是没有，从 API 获取
-        if (lyrics == null || lyrics.isEmpty) {
-          lyrics = await _apiService.getLyrics(songId: song.id);
-          // 保存到数据库供下次使用
-          if (lyrics != null && lyrics.isNotEmpty) {
-            await _lyricsService.saveLyrics(
-              songId: song.id,
-              lyrics: lyrics,
-              title: song.title,
-              artist: song.artist,
-            );
+          final dbLyrics = await _lyricsService.getLyricsWithTranslation(song.id);
+          if (dbLyrics != null) {
+            lyrics = dbLyrics['lrc'];
+            translation = dbLyrics['trans'];
           }
         }
-        
+
+        // 3. 如果还是没有，从 API 获取
+        if (lyrics == null || lyrics.isEmpty) {
+          final apiLyrics = await _apiService.getLyricsWithTranslation(songId: song.id);
+          if (apiLyrics != null) {
+            lyrics = apiLyrics['lrc'];
+            translation = apiLyrics['trans'];
+            // 保存到数据库供下次使用
+            if (lyrics != null && lyrics.isNotEmpty) {
+              await _lyricsService.saveLyrics(
+                songId: song.id,
+                lyrics: lyrics,
+                title: song.title,
+                artist: song.artist,
+                translation: translation,
+              );
+            }
+          }
+        }
+
         // 4. 保存歌词到本地文件
         if (lyrics != null && lyrics.isNotEmpty) {
           final lyricsFileName = '$safeFileName.lrc';
           localLyricsPath = path.join(downloadDir.path, lyricsFileName);
           await File(localLyricsPath).writeAsString(lyrics, encoding: utf8);
           Logger.success('歌词下载成功', 'Download');
+
+          // 5. 如果有翻译,也保存到本地文件
+          if (translation != null && translation.isNotEmpty) {
+            final transFileName = '${safeFileName}_trans.lrc';
+            localTransPath = path.join(downloadDir.path, transFileName);
+            await File(localTransPath).writeAsString(translation, encoding: utf8);
+            Logger.success('歌词翻译下载成功', 'Download');
+          }
         } else {
           Logger.warning('未找到歌词', 'Download');
         }
@@ -175,6 +194,7 @@ class DownloadService {
         localAudioPath: audioFilePath,
         localCoverPath: localCoverPath,
         localLyricsPath: localLyricsPath,
+        localTransPath: localTransPath,
         duration: song.duration,
         platform: song.platform,
         downloadedAt: DateTime.now(),
@@ -291,13 +311,13 @@ class DownloadService {
     try {
       final downloaded = await getDownloadedSongs();
       final song = downloaded.firstWhere((s) => s.id == songId);
-      
+
       // 删除音频文件
       final audioFile = File(song.localAudioPath);
       if (await audioFile.exists()) {
         await audioFile.delete();
       }
-      
+
       // 删除封面文件
       if (song.localCoverPath != null) {
         final coverFile = File(song.localCoverPath!);
@@ -305,7 +325,7 @@ class DownloadService {
           await coverFile.delete();
         }
       }
-      
+
       // 删除歌词文件
       if (song.localLyricsPath != null) {
         final lyricsFile = File(song.localLyricsPath!);
@@ -313,12 +333,20 @@ class DownloadService {
           await lyricsFile.delete();
         }
       }
-      
+
+      // 删除翻译文件
+      if (song.localTransPath != null) {
+        final transFile = File(song.localTransPath!);
+        if (await transFile.exists()) {
+          await transFile.delete();
+        }
+      }
+
       // 从记录中移除
       downloaded.removeWhere((s) => s.id == songId);
       final jsonList = downloaded.map((s) => s.toJson()).toList();
       await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
-      
+
       Logger.success('删除成功: ${song.title}', 'Download');
       return true;
     } catch (e) {
@@ -364,19 +392,6 @@ class DownloadService {
     } catch (e) {
       Logger.error('获取大小失败', e, null, 'Download');
       return 0;
-    }
-  }
-
-  /// 格式化文件大小
-  String formatSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    } else if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(2)} KB';
-    } else if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
-    } else {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
     }
   }
 

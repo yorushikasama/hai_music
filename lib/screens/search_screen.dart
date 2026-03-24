@@ -28,7 +28,7 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final MusicApiService _apiService = MusicApiService();
+  static final MusicApiService _apiService = MusicApiService();
   List<Song> _searchResults = [];
   List<String> _searchHistory = [];
   bool _isSearching = false;

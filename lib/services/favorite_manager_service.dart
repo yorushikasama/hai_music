@@ -76,12 +76,9 @@ class FavoriteManagerService {
         await _syncToCloud(song, audioQuality: audioQuality);
       } else {
         // 未启用云端同步时，也保存基本信息到数据库
-        Logger.info('保存收藏信息到数据库: ${song.title}', 'FavoriteManager');
-        
         // 获取歌词
         String? lyricsLrc = song.lyricsLrc;
         if (lyricsLrc == null || lyricsLrc.isEmpty) {
-          Logger.info('正在获取歌词...', 'FavoriteManager');
           lyricsLrc = await _apiService.getLyrics(songId: song.id);
           if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
             Logger.success('歌词获取成功', 'FavoriteManager');
@@ -117,12 +114,9 @@ class FavoriteManagerService {
   /// [audioQuality] 音频音质（可选，默认使用臻品母带）
   Future<void> _syncToCloud(Song song, {int? audioQuality}) async {
     try {
-      Logger.info('开始同步歌曲到云端: ${song.title}', 'FavoriteManager');
-      
       // 1. 获取歌词（如果 song 中没有）
       String? lyricsLrc = song.lyricsLrc;
       if (lyricsLrc == null || lyricsLrc.isEmpty) {
-        Logger.info('正在获取歌词...', 'FavoriteManager');
         lyricsLrc = await _apiService.getLyrics(songId: song.id);
         if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
           Logger.success('歌词获取成功', 'FavoriteManager');
@@ -135,30 +129,23 @@ class FavoriteManagerService {
       final audioFile = await _downloadAudio(song, audioQuality: audioQuality);
       final coverFile = await _downloadCover(song);
 
-      Logger.info('下载完成 - 音频: ${audioFile != null}, 封面: ${coverFile != null}', 'FavoriteManager');
-
       // 3. 获取真实时长（从音频文件）
       int durationSeconds = song.duration ?? 0;
       if (audioFile != null && durationSeconds == 0) {
         durationSeconds = await _getAudioDuration(audioFile);
-        Logger.info('从音频文件获取时长: $durationSeconds 秒', 'FavoriteManager');
-      }
+        }
 
       // 4. 上传到 R2
       String? r2AudioUrl;
       String? r2CoverUrl;
 
       if (audioFile != null) {
-        Logger.info('正在上传音频到 R2...', 'FavoriteManager');
         r2AudioUrl = await _r2.uploadAudio(audioFile, song.id);
-        Logger.info('音频上传完成: $r2AudioUrl', 'FavoriteManager');
-      }
+        }
 
       if (coverFile != null) {
-        Logger.info('正在上传封面到 R2...', 'FavoriteManager');
         r2CoverUrl = await _r2.uploadCover(coverFile, song.id);
-        Logger.info('封面上传完成: $r2CoverUrl', 'FavoriteManager');
-      }
+        }
 
       // 5. 保存到 Supabase 数据库
       final favoriteSong = FavoriteSong(
@@ -177,7 +164,6 @@ class FavoriteManagerService {
         syncedAt: DateTime.now(),
       );
 
-      Logger.info('正在保存到 Supabase...', 'FavoriteManager');
       await _supabase.addFavorite(favoriteSong);
       
       Logger.success('歌曲已成功同步到云端: ${song.title}', 'FavoriteManager');
@@ -201,7 +187,6 @@ class FavoriteManagerService {
 
       // 如果文件已存在，直接返回
       if (await file.exists()) {
-        Logger.info('音频文件已存在，跳过下载', 'FavoriteManager');
         return file;
       }
 
@@ -210,7 +195,6 @@ class FavoriteManagerService {
       if (audioUrl.isEmpty) {
         // 使用传入的音质，如果没有则使用臻品母带
         final quality = audioQuality ?? AppConstants.qualityLossless;
-        Logger.info('正在获取音频播放链接... (音质: $quality)', 'FavoriteManager');
         audioUrl = await _apiService.getSongUrl(
           songId: song.id,
           quality: quality,
@@ -222,7 +206,6 @@ class FavoriteManagerService {
         return null;
       }
 
-      Logger.info('开始下载音频: $audioUrl', 'FavoriteManager');
       // 下载文件
       await _dio.download(audioUrl, filePath);
       Logger.success('音频下载完成', 'FavoriteManager');
@@ -296,12 +279,10 @@ class FavoriteManagerService {
       await _prefs.removeFavorite(songId);
 
       // 2. 从数据库删除（无论是否启用云端同步）
-      Logger.info('从数据库删除收藏: $songId', 'FavoriteManager');
       await _supabase.removeFavorite(songId);
 
       // 3. 如果启用云端同步，则删除 R2 文件
       if (isSyncEnabled) {
-        Logger.info('删除 R2 文件: $songId', 'FavoriteManager');
         await _r2.deleteSongFiles(songId);
       }
 
@@ -339,16 +320,12 @@ class FavoriteManagerService {
   /// 获取所有收藏
   Future<List<FavoriteSong>> getFavorites() async {
     if (!_initialized) {
-      Logger.info('FavoriteManager 未初始化，正在初始化...', 'FavoriteManager');
       await initialize();
     }
 
     try {
-      Logger.info('云同步状态: ${isSyncEnabled ? "已启用" : "未启用"}', 'FavoriteManager');
-      
       if (isSyncEnabled) {
         // 从云端获取
-        Logger.info('从云端获取收藏列表...', 'FavoriteManager');
         final favorites = await _supabase.getFavorites();
         
         // 🔧 修复：同步更新 SharedPreferences 中的 ID 列表，确保 MusicProvider 的收藏状态正确
@@ -359,9 +336,6 @@ class FavoriteManagerService {
         return favorites;
       } else {
         // 从本地获取（只有ID列表）
-        Logger.info('从本地获取收藏ID列表...', 'FavoriteManager');
-        final ids = _prefs.getFavorites();
-        Logger.info('本地收藏ID: $ids', 'FavoriteManager');
         // 注意：本地模式下无法获取完整的歌曲信息
         // 需要配合其他服务来获取歌曲详情
         return [];
@@ -388,8 +362,6 @@ class FavoriteManagerService {
   /// 更新配置
   Future<bool> updateConfig(StorageConfig config) async {
     try {
-      Logger.info('开始更新配置...', 'FavoriteManager');
-      
       // 保存配置到本地
       final saveSuccess = await _configService.saveConfig(config);
       if (!saveSuccess) {
@@ -404,8 +376,6 @@ class FavoriteManagerService {
 
       // 如果启用了云端同步，初始化云端服务
       if (config.isValid && config.enableSync) {
-        Logger.info('配置有效且启用同步，初始化云端服务...', 'FavoriteManager');
-        
         try {
           await _supabase.initialize(config);
           Logger.success('Supabase 初始化成功', 'FavoriteManager');
@@ -422,8 +392,7 @@ class FavoriteManagerService {
           // 即使 R2 初始化失败，配置也已保存
         }
       } else {
-        Logger.info('云端同步未启用或配置无效', 'FavoriteManager');
-      }
+        }
 
       Logger.success('配置更新完成', 'FavoriteManager');
       return true;

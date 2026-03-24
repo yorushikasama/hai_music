@@ -162,7 +162,6 @@ class ThemeProvider extends ChangeNotifier {
       ),
 
       // NavigationBar 主题
-      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: c.surface.withValues(alpha: 0.75),
         indicatorColor: c.accent.withValues(alpha: 0.12),
@@ -179,7 +178,6 @@ class ThemeProvider extends ChangeNotifier {
       ),
 
       // Card 主题
-      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       cardTheme: CardThemeData(
         color: c.card.withValues(alpha: 0.6),
         elevation: 0,

@@ -14,6 +14,7 @@ class DownloadedSong {
   final String localAudioPath; // 本地音频文件路径
   final String? localCoverPath; // 本地封面文件路径
   final String? localLyricsPath; // 本地歌词文件路径
+  final String? localTransPath; // 本地翻译文件路径
   final int? duration;
   final String? platform;
   final DateTime downloadedAt;
@@ -28,6 +29,7 @@ class DownloadedSong {
     required this.localAudioPath,
     this.localCoverPath,
     this.localLyricsPath,
+    this.localTransPath,
     this.duration,
     this.platform,
     required this.downloadedAt,
@@ -44,6 +46,7 @@ class DownloadedSong {
       localAudioPath: json['localAudioPath'] ?? '',
       localCoverPath: json['localCoverPath'],
       localLyricsPath: json['localLyricsPath'],
+      localTransPath: json['localTransPath'],
       duration: json['duration'] as int?,
       platform: json['platform'],
       downloadedAt: DateTime.parse(json['downloadedAt']),
@@ -61,6 +64,7 @@ class DownloadedSong {
       'localAudioPath': localAudioPath,
       'localCoverPath': localCoverPath,
       'localLyricsPath': localLyricsPath,
+      'localTransPath': localTransPath,
       'duration': duration,
       'platform': platform,
       'downloadedAt': downloadedAt.toIso8601String(),

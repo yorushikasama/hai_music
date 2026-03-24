@@ -61,7 +61,6 @@ class _HomeScreenState extends State<HomeScreen> {
           : ClipRect(
               child: BackdropFilter(
                 filter: AppStyles.backdropBlur,
-                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
               child: Container(
                   decoration: BoxDecoration(
                     color: colors.surface.withValues(alpha: 0.75),
@@ -108,7 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ? LinearGradient(
                   begin: (colors.backgroundGradient as LinearGradient).begin,
                   end: (colors.backgroundGradient as LinearGradient).end,
-                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                   colors: (colors.backgroundGradient as LinearGradient).colors
                       .map((c) => c.withValues(alpha: 0.95))
                       .toList(),
@@ -127,7 +125,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ClipRRect(
                     child: BackdropFilter(
                       filter: AppStyles.backdropBlur,
-                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       child: Container(
                         width: AppStyles.sidebarWidth,
                         decoration: BoxDecoration(
@@ -191,7 +188,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   horizontal: AppStyles.spacingL,
                                   vertical: AppStyles.spacingM,
                                 ),
-                                // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                                 decoration: BoxDecoration(
                                   color: colors.accent.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
@@ -243,7 +239,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     horizontal: AppStyles.spacingL,
                                     vertical: AppStyles.spacingM,
                                   ),
-                                  // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                                   decoration: BoxDecoration(
                                     color: colors.surface.withValues(alpha: 0.5),
                                     borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
@@ -347,7 +342,6 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingM),
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
             decoration: BoxDecoration(
               color: isSelected
                   ? colors.accent.withValues(alpha: 0.12)
@@ -390,7 +384,6 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
         boxShadow: [
             BoxShadow(
               color: color.withValues(alpha: 0.3),

@@ -516,7 +516,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       margin: const EdgeInsets.all(8),
       width: 48,
       height: 48,
-      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.3),
         shape: BoxShape.circle,

@@ -25,9 +25,9 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  final _apiService = MusicApiService();
-  final _scraperService = PlaylistScraperService();
-  final _cacheService = DataCacheService();
+  static final _apiService = MusicApiService();
+  static final _scraperService = PlaylistScraperService();
+  static final _cacheService = DataCacheService();
   final _playlistScrollController = ScrollController();
   final _dailyScrollController = ScrollController();
   List<Song> _dailyRecommendations = [];
@@ -247,8 +247,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final playlists = Playlist.getMockData();
-
     final isWeb = PlatformUtils.isWeb;
 
     return Scaffold(
@@ -273,7 +271,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       onRefresh: () => _loadDailyRecommendations(forceRefresh: true),
                     ),
                     const SizedBox(height: 32),
-                    _buildRecommendedPlaylists(context, playlists),
+                    _buildRecommendedPlaylists(context),
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -284,7 +282,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       ),
     );
   }
-  Widget _buildRecommendedPlaylists(BuildContext context, List<Playlist> playlists) {
+  Widget _buildRecommendedPlaylists(BuildContext context) {
     final padding = Responsive.getHorizontalPadding(context);
     final colors = Provider.of<ThemeProvider>(context).colors;
     
@@ -388,7 +386,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   top: 0,
                   bottom: 0,
                   child: Center(
-                    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                     child: Container(
                       margin: const EdgeInsets.only(left: 8),
                       decoration: BoxDecoration(
@@ -422,7 +419,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   top: 0,
                   bottom: 0,
                   child: Center(
-                    // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                     child: Container(
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
@@ -552,7 +548,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           width: 200,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-            // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
           boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.1),
@@ -571,7 +566,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                     child: AspectRatio(
                       aspectRatio: 1,
-                      // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                       child: CachedNetworkImage(
                         imageUrl: playlist.coverUrl,
                         fit: BoxFit.cover,
@@ -614,7 +608,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           onTap: null, // 由外层GestureDetector处理
                           child: Container(
                             decoration: BoxDecoration(
-                              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                             gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,

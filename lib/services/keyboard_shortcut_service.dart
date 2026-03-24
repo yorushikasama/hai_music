@@ -225,7 +225,6 @@ class KeyboardShortcutService {
                                 horizontal: 12,
                                 vertical: 6,
                               ),
-                              // 🔧 优化:使用 withValues() 替代已弃用的 withOpacity()
                               decoration: BoxDecoration(
                                 color: Colors.grey.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(6),
