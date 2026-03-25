@@ -642,6 +642,7 @@ class PlaybackControllerService extends ChangeNotifier {
       platform: song.platform,
       r2CoverUrl: song.r2CoverUrl,
       lyricsLrc: song.lyricsLrc,
+      lyricsTrans: song.lyricsTrans,
     );
   }
   

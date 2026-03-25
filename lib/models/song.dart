@@ -62,6 +62,7 @@ class Song {
       audioUrl: json['url'] ?? '',
       duration: durationSeconds,
       platform: platform,
+      lyricsTrans: json['lyricsTrans'] ?? json['translation'],
     );
   }
 
@@ -80,4 +81,47 @@ class Song {
       'lyricsTrans': lyricsTrans,
     };
   }
+
+  /// 创建Song对象的副本，可以覆盖指定字段
+  Song copyWith({
+    String? id,
+    String? title,
+    String? artist,
+    String? album,
+    String? coverUrl,
+    String? audioUrl,
+    int? duration,
+    String? platform,
+    String? r2CoverUrl,
+    String? lyricsLrc,
+    String? lyricsTrans,
+  }) {
+    return Song(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      album: album ?? this.album,
+      coverUrl: coverUrl ?? this.coverUrl,
+      audioUrl: audioUrl ?? this.audioUrl,
+      duration: duration ?? this.duration,
+      platform: platform ?? this.platform,
+      r2CoverUrl: r2CoverUrl ?? this.r2CoverUrl,
+      lyricsLrc: lyricsLrc ?? this.lyricsLrc,
+      lyricsTrans: lyricsTrans ?? this.lyricsTrans,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'Song(id: $id, title: $title, artist: $artist, album: $album, duration: $duration, platform: $platform)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is Song && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }

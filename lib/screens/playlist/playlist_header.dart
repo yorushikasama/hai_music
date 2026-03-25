@@ -2,9 +2,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../utils/platform_utils.dart';
+import '../../utils/window_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
 
 import '../../models/playlist.dart';
 import '../../providers/theme_provider.dart';
@@ -35,7 +36,8 @@ class PlaylistDetailHeader extends StatelessWidget {
         onPanStart: !kIsWeb
             ? (_) {
                 try {
-                  appWindow.startDragging();
+                  // 使用WindowUtils处理平台特定的窗口操作
+                  WindowUtils.startDragging();
                 } catch (e) {
                   // 桌面平台支持窗口拖动
                 }

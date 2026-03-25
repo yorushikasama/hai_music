@@ -308,6 +308,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
               audioUrl: '',
               duration: history.duration,
               platform: history.platform,
+              lyricsTrans: history.lyricsTrans,
             );
             
             musicProvider.playSong(song);

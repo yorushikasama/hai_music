@@ -48,6 +48,7 @@ extension SongExtension on Song {
     String? platform,
     String? r2CoverUrl,
     String? lyricsLrc,
+    String? lyricsTrans,
   }) {
     return Song(
       id: id ?? this.id,
@@ -60,6 +61,7 @@ extension SongExtension on Song {
       platform: platform ?? this.platform,
       r2CoverUrl: r2CoverUrl ?? this.r2CoverUrl,
       lyricsLrc: lyricsLrc ?? this.lyricsLrc,
+      lyricsTrans: lyricsTrans ?? this.lyricsTrans,
     );
   }
 }

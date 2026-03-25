@@ -16,6 +16,7 @@ extension FavoriteSongExtension on FavoriteSong {
       platform: platform,
       r2CoverUrl: r2CoverUrl,
       lyricsLrc: lyricsLrc, // 包含歌词
+      lyricsTrans: lyricsTrans, // 包含歌词翻译
     );
   }
 }

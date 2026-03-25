@@ -163,6 +163,8 @@ class LocalAudioScanner {
       String artist = '未知艺术家';
       String album = '未知专辑';
       int? duration;
+      String? localLyricsPath;
+      String? localTransPath;
       
       // 尝试读取音频元数据（支持 MP3, M4A, FLAC, OGG, WAV 等）
       try {
@@ -183,6 +185,21 @@ class LocalAudioScanner {
         artist = parsed.artist;
       }
       
+      // 检查是否存在对应的歌词文件
+      final basePath = file.path.substring(0, file.path.lastIndexOf('.'));
+      final lrcFile = File('$basePath.lrc');
+      if (await lrcFile.exists()) {
+        localLyricsPath = lrcFile.path;
+        Logger.success('找到歌词文件: ${lrcFile.path}', 'LocalScanner');
+      }
+      
+      // 检查是否存在对应的翻译文件
+      final transFile = File('${basePath}_trans.lrc');
+      if (await transFile.exists()) {
+        localTransPath = transFile.path;
+        Logger.success('找到翻译文件: ${transFile.path}', 'LocalScanner');
+      }
+      
       return DownloadedSong(
         id: 'desktop_${file.path.hashCode.abs()}',
         title: title,
@@ -190,6 +207,8 @@ class LocalAudioScanner {
         album: album,
         coverUrl: '',
         localAudioPath: file.path,
+        localLyricsPath: localLyricsPath,
+        localTransPath: localTransPath,
         duration: duration,
         platform: 'local',
         downloadedAt: stat.modified,
@@ -230,6 +249,31 @@ class LocalAudioScanner {
     try {
       // 生成唯一ID
       final id = 'local_${song.id}';
+      
+      // 检查是否存在对应的歌词文件
+      String? localLyricsPath;
+      String? localTransPath;
+      
+      try {
+        final audioFile = File(song.data);
+        final basePath = song.data.substring(0, song.data.lastIndexOf('.'));
+        
+        // 检查是否存在对应的歌词文件
+        final lrcFile = File('$basePath.lrc');
+        if (lrcFile.existsSync()) {
+          localLyricsPath = lrcFile.path;
+          Logger.success('找到歌词文件: ${lrcFile.path}', 'LocalScanner');
+        }
+        
+        // 检查是否存在对应的翻译文件
+        final transFile = File('${basePath}_trans.lrc');
+        if (transFile.existsSync()) {
+          localTransPath = transFile.path;
+          Logger.success('找到翻译文件: ${transFile.path}', 'LocalScanner');
+        }
+      } catch (e) {
+        Logger.warning('检查歌词文件失败: $e', 'LocalScanner');
+      }
 
       return DownloadedSong(
         id: id,
@@ -238,6 +282,8 @@ class LocalAudioScanner {
         album: song.album ?? '未知专辑',
         coverUrl: '', // 封面通过 queryArtwork 获取
         localAudioPath: song.data,
+        localLyricsPath: localLyricsPath,
+        localTransPath: localTransPath,
         duration: song.duration != null ? (song.duration! ~/ 1000) : null, // 转换毫秒为秒
         platform: 'local',
         downloadedAt: DateTime.fromMillisecondsSinceEpoch(

@@ -13,7 +13,7 @@ import '../services/keyboard_shortcut_service.dart';
 import 'discover_screen.dart';
 import 'search_screen.dart';
 import 'library_screen.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
+import '../utils/window_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -408,39 +408,24 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildMacOSButton(
                 color: const Color(0xFFFF5F57),
                 onPressed: () {
-                  if (PlatformUtils.isDesktop) {
-                    try {
-                      appWindow.close();
-                    } catch (e) {
-                      // 忽略错误
-                    }
-                  }
+                  // 使用WindowUtils处理平台特定的窗口操作
+                  WindowUtils.close();
                 },
               ),
               SizedBox(width: AppStyles.spacingS),
               _buildMacOSButton(
                 color: const Color(0xFFFEBC2E),
                 onPressed: () {
-                  if (PlatformUtils.isDesktop) {
-                    try {
-                      appWindow.minimize();
-                    } catch (e) {
-                      // 忽略错误
-                    }
-                  }
+                  // 使用WindowUtils处理平台特定的窗口操作
+                  WindowUtils.minimize();
                 },
               ),
               SizedBox(width: AppStyles.spacingS),
               _buildMacOSButton(
                 color: const Color(0xFF28C840),
                 onPressed: () {
-                  if (PlatformUtils.isDesktop) {
-                    try {
-                      appWindow.maximizeOrRestore();
-                    } catch (e) {
-                      // 忽略错误
-                    }
-                  }
+                  // 使用WindowUtils处理平台特定的窗口操作
+                  WindowUtils.maximizeOrRestore();
                 },
               ),
             ],

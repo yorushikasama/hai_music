@@ -76,14 +76,19 @@ class FavoriteManagerService {
         await _syncToCloud(song, audioQuality: audioQuality);
       } else {
         // 未启用云端同步时，也保存基本信息到数据库
-        // 获取歌词
+        // 获取歌词和翻译
         String? lyricsLrc = song.lyricsLrc;
+        String? lyricsTrans = song.lyricsTrans;
         if (lyricsLrc == null || lyricsLrc.isEmpty) {
-          lyricsLrc = await _apiService.getLyrics(songId: song.id);
-          if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
-            Logger.success('歌词获取成功', 'FavoriteManager');
-          } else {
-            Logger.warning('未获取到歌词', 'FavoriteManager');
+          final lyricsData = await _apiService.getLyricsWithTranslation(songId: song.id);
+          if (lyricsData != null) {
+            lyricsLrc = lyricsData['lrc'];
+            lyricsTrans = lyricsData['trans'];
+            if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
+              Logger.success('歌词获取成功', 'FavoriteManager');
+            } else {
+              Logger.warning('未获取到歌词', 'FavoriteManager');
+            }
           }
         }
         
@@ -96,6 +101,7 @@ class FavoriteManagerService {
           duration: song.duration,
           platform: song.platform,
           lyricsLrc: lyricsLrc,
+          lyricsTrans: lyricsTrans,
           syncedAt: DateTime.now(),
         );
         await _supabase.addFavorite(favoriteSong);
@@ -114,14 +120,19 @@ class FavoriteManagerService {
   /// [audioQuality] 音频音质（可选，默认使用臻品母带）
   Future<void> _syncToCloud(Song song, {int? audioQuality}) async {
     try {
-      // 1. 获取歌词（如果 song 中没有）
+      // 1. 获取歌词和翻译（如果 song 中没有）
       String? lyricsLrc = song.lyricsLrc;
+      String? lyricsTrans = song.lyricsTrans;
       if (lyricsLrc == null || lyricsLrc.isEmpty) {
-        lyricsLrc = await _apiService.getLyrics(songId: song.id);
-        if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
-          Logger.success('歌词获取成功', 'FavoriteManager');
-        } else {
-          Logger.warning('未获取到歌词', 'FavoriteManager');
+        final lyricsData = await _apiService.getLyricsWithTranslation(songId: song.id);
+        if (lyricsData != null) {
+          lyricsLrc = lyricsData['lrc'];
+          lyricsTrans = lyricsData['trans'];
+          if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
+            Logger.success('歌词获取成功', 'FavoriteManager');
+          } else {
+            Logger.warning('未获取到歌词', 'FavoriteManager');
+          }
         }
       }
       
@@ -161,6 +172,7 @@ class FavoriteManagerService {
         duration: durationSeconds > 0 ? durationSeconds : AppConstants.defaultSongDuration,
         platform: song.platform,
         lyricsLrc: lyricsLrc, // 保存获取到的歌词
+        lyricsTrans: lyricsTrans, // 保存获取到的翻译
         syncedAt: DateTime.now(),
       );
 

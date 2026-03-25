@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
 import '../utils/platform_utils.dart';
+import '../utils/window_utils.dart';
 
 /// 可拖动窗口区域组件
 /// 在桌面平台上允许用户通过拖动该区域来移动窗口
@@ -38,15 +38,15 @@ class DraggableWindowArea extends StatelessWidget {
       behavior: HitTestBehavior.translucent,
       onPanStart: (_) {
         try {
-          appWindow.startDragging();
+          // 使用WindowUtils处理平台特定的窗口操作
+          WindowUtils.startDragging();
         } catch (e) {
           // 忽略错误 (Web 平台或其他不支持的情况)
         }
       },
-      child: Container(
-        height: height,
+      child: SizedBox(
         width: width,
-        color: color ?? Colors.transparent,
+        height: height,
         child: child,
       ),
     );

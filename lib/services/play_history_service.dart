@@ -27,6 +27,7 @@ class PlayHistoryService {
         coverUrl: song.coverUrl,
         duration: song.duration,
         platform: song.platform,
+        lyricsTrans: song.lyricsTrans,
         playedAt: DateTime.now(),
       );
 

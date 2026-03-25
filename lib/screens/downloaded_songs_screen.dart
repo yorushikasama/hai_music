@@ -343,7 +343,35 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                       }
                     });
                   },
-                  onPlay: (downloadedSong) {
+                  onPlay: (downloadedSong) async {
+                    // 尝试加载本地歌词和翻译
+                    String? lyricsLrc;
+                    String? lyricsTrans;
+                    
+                    // 读取本地歌词文件
+                    if (downloadedSong.localLyricsPath != null) {
+                      try {
+                        final lyricsFile = io.File(downloadedSong.localLyricsPath!);
+                        if (await lyricsFile.exists()) {
+                          lyricsLrc = await lyricsFile.readAsString();
+                        }
+                      } catch (e) {
+                        Logger.warning('读取本地歌词失败: $e', 'DownloadedSongsScreen');
+                      }
+                    }
+                    
+                    // 读取本地翻译文件
+                    if (downloadedSong.localTransPath != null) {
+                      try {
+                        final transFile = io.File(downloadedSong.localTransPath!);
+                        if (await transFile.exists()) {
+                          lyricsTrans = await transFile.readAsString();
+                        }
+                      } catch (e) {
+                        Logger.warning('读取本地翻译失败: $e', 'DownloadedSongsScreen');
+                      }
+                    }
+                    
                     // 转换为 Song 对象并播放
                     final song = Song(
                       id: downloadedSong.id,
@@ -354,19 +382,52 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                       audioUrl: _convertToFileUri(downloadedSong.localAudioPath), // 使用本地文件
                       duration: downloadedSong.duration,
                       platform: downloadedSong.platform,
+                      lyricsLrc: lyricsLrc,
+                      lyricsTrans: lyricsTrans,
                     );
 
                     // 将所有下载的歌曲转换为播放列表
-                    final allSongs = _filteredSongs.map((d) => Song(
-                          id: d.id,
-                          title: d.title,
-                          artist: d.artist,
-                          album: d.album,
-                          coverUrl: d.coverUrl,
-                          audioUrl: _convertToFileUri(d.localAudioPath),
-                          duration: d.duration,
-                          platform: d.platform,
-                        )).toList();
+                    final allSongs = await Future.wait(_filteredSongs.map((d) async {
+                      String? songLyrics;
+                      String? songTrans;
+                      
+                      // 读取本地歌词文件
+                      if (d.localLyricsPath != null) {
+                        try {
+                          final lyricsFile = io.File(d.localLyricsPath!);
+                          if (await lyricsFile.exists()) {
+                            songLyrics = await lyricsFile.readAsString();
+                          }
+                        } catch (e) {
+                          Logger.warning('读取本地歌词失败: $e', 'DownloadedSongsScreen');
+                        }
+                      }
+                      
+                      // 读取本地翻译文件
+                      if (d.localTransPath != null) {
+                        try {
+                          final transFile = io.File(d.localTransPath!);
+                          if (await transFile.exists()) {
+                            songTrans = await transFile.readAsString();
+                          }
+                        } catch (e) {
+                          Logger.warning('读取本地翻译失败: $e', 'DownloadedSongsScreen');
+                        }
+                      }
+                      
+                      return Song(
+                        id: d.id,
+                        title: d.title,
+                        artist: d.artist,
+                        album: d.album,
+                        coverUrl: d.coverUrl,
+                        audioUrl: _convertToFileUri(d.localAudioPath),
+                        duration: d.duration,
+                        platform: d.platform,
+                        lyricsLrc: songLyrics,
+                        lyricsTrans: songTrans,
+                      );
+                    }).toList());
 
                     musicProvider.playSong(song, playlist: allSongs);
                   },

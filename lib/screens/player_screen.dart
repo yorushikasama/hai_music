@@ -3,17 +3,23 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_lyric/lyrics_reader.dart';
-import 'package:flutter_lyric/lyrics_model_builder.dart';
+// import 'package:cached_network_image/cached_network_image';
 
 import '../utils/logger.dart';
 import '../providers/music_provider.dart';
+import '../models/song.dart';
 import '../services/music_api_service.dart';
 import '../services/lyrics_service.dart';
 import '../services/download_service.dart';
 import '../widgets/draggable_window_area.dart';
 import '../utils/platform_utils.dart';
+
+// 导入flutter_lyric包的具体文件
+import 'package:flutter_lyric/lyrics_reader.dart';
+import 'package:flutter_lyric/lyrics_reader_model.dart';
+import 'package:flutter_lyric/lyrics_model_builder.dart';
+import 'package:flutter_lyric/lyric_ui/lyric_ui.dart';
+import 'package:flutter_lyric/lyric_ui/ui_netease.dart';
 
 import 'player/player_bottom_sheets.dart';
 import 'player/player_controls.dart';
@@ -35,7 +41,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   String? _currentLyricsLrc;
   String? _currentLyricsTrans;
 
-  // 自定义歌词UI样式
+  // 歌词UI配置
   final lyricUI = UINetease(
     defaultSize: 16,
     defaultExtSize: 20,
@@ -47,9 +53,9 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     highlightDirection: HighlightDirection.LTR,
   );
 
-  var lyricModel = LyricsModelBuilder.create()
-      .bindLyricToMain('[00:00.00]加载中...\n[00:01.00] \n[00:02.00] ')
-      .getModel();
+  // 歌词模型
+  late LyricsReaderModel lyricModel;
+  String? _currentLyrics; // 暂时使用字符串存储歌词
 
   @override
   void initState() {
@@ -58,6 +64,10 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
       duration: const Duration(seconds: 20),
       vsync: this,
     )..repeat();
+    // 初始化歌词模型
+    lyricModel = LyricsModelBuilder.create()
+        .bindLyricToMain('[00:00.00]加载中...\n[00:01.00] \n[00:02.00] ')
+        .getModel();
     // 延迟加载歌词，确保 MusicProvider 已经更新
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadLyrics();
@@ -68,6 +78,148 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   void dispose() {
     _rotationController.dispose();
     super.dispose();
+  }
+
+  /// 加载歌词和翻译
+  Future<Map<String, String?>> _loadLyricsData(Song song) async {
+    String? lyrics;
+    String? trans;
+    
+    // 1) 优先使用 Song 对象中的歌词和翻译
+    if (song.lyricsLrc != null && song.lyricsLrc!.isNotEmpty) {
+      lyrics = song.lyricsLrc;
+      Logger.debug('✅ 使用对象存储的歌词: ${song.title}');
+      if (song.lyricsTrans != null && song.lyricsTrans!.isNotEmpty) {
+        trans = song.lyricsTrans;
+        Logger.debug('✅ 使用对象存储的翻译: ${song.title}');
+      }
+      return {'lyrics': lyrics, 'trans': trans};
+    }
+    
+    // 2) 检查是否有本地下载的歌词文件
+    final downloaded = await _downloadService.getDownloadedSongs();
+    final downloadedSong = downloaded.where((d) => d.id == song.id).firstOrNull;
+    
+    // 读取本地歌词文件
+    if (downloadedSong?.localLyricsPath != null) {
+      try {
+        final lyricsFile = File(downloadedSong!.localLyricsPath!);
+        if (await lyricsFile.exists()) {
+          lyrics = await lyricsFile.readAsString();
+          Logger.debug('✅ 使用本地下载的歌词: ${song.title}');
+        }
+      } catch (e) {
+        Logger.warning('读取本地歌词失败: $e', 'PlayerScreen');
+      }
+    }
+    
+    // 读取本地翻译文件
+    if (downloadedSong?.localTransPath != null) {
+      try {
+        final transFile = File(downloadedSong!.localTransPath!);
+        if (await transFile.exists()) {
+          trans = await transFile.readAsString();
+          Logger.debug('✅ 使用本地下载的翻译: ${song.title}');
+        }
+      } catch (e) {
+        Logger.warning('读取本地翻译失败: $e', 'PlayerScreen');
+      }
+    }
+    
+    // 3) 检查是否为本地扫描的歌曲，直接从音频文件路径查找歌词和翻译文件
+    if (lyrics == null || trans == null) {
+      try {
+        // 尝试从音频文件路径构建歌词和翻译文件路径
+        // 检查 audioUrl 是否为本地文件路径
+        if (song.audioUrl.startsWith('file://')) {
+          // 从 file:// URI 提取文件路径
+          String audioFilePath = song.audioUrl;
+          // 移除 file:// 前缀
+          if (audioFilePath.startsWith('file:///')) {
+            audioFilePath = audioFilePath.substring(8);
+          } else if (audioFilePath.startsWith('file://')) {
+            audioFilePath = audioFilePath.substring(7);
+          }
+          // Windows 路径特殊处理
+          if (Platform.isWindows && audioFilePath.startsWith('/')) {
+            audioFilePath = audioFilePath.substring(1);
+          }
+          
+          if (audioFilePath.isNotEmpty) {
+            final basePath = audioFilePath.substring(0, audioFilePath.lastIndexOf('.'));
+            
+            // 检查歌词文件
+            if (lyrics == null) {
+              final lrcFile = File('$basePath.lrc');
+              if (await lrcFile.exists()) {
+                lyrics = await lrcFile.readAsString();
+                Logger.debug('✅ 使用本地扫描的歌词: ${song.title}');
+              }
+            }
+            
+            // 检查翻译文件
+            if (trans == null) {
+              final transFile = File('${basePath}_trans.lrc');
+              if (await transFile.exists()) {
+                trans = await transFile.readAsString();
+                Logger.debug('✅ 使用本地扫描的翻译: ${song.title}');
+              }
+            }
+          }
+        }
+      } catch (e) {
+        Logger.warning('读取本地扫描歌曲的歌词和翻译失败: $e', 'PlayerScreen');
+      }
+    }
+    
+    if (lyrics != null && lyrics.isNotEmpty) {
+      return {'lyrics': lyrics, 'trans': trans};
+    }
+    
+    // 4) 从数据库读取歌词和翻译
+    final dbResult = await LyricsService().getLyricsWithTranslation(song.id);
+    if (dbResult != null) {
+      if (lyrics == null || lyrics.isEmpty) {
+        lyrics = dbResult['lrc'];
+        if (lyrics != null && lyrics.isNotEmpty) {
+          Logger.debug('✅ 从数据库读取歌词: ${song.title}');
+        }
+      }
+      if (trans == null || trans.isEmpty) {
+        trans = dbResult['trans'];
+        if (trans != null && trans.isNotEmpty) {
+          Logger.debug('✅ 从数据库读取翻译: ${song.title}');
+        }
+      }
+      
+      if (lyrics != null && lyrics.isNotEmpty) {
+        return {'lyrics': lyrics, 'trans': trans};
+      }
+    }
+    
+    // 5) 最后回退到 API，并把结果写回数据库
+    Logger.debug('⚠️ 无本地歌词，使用API获取: ${song.title}');
+    final result = await _apiService.getLyricsWithTranslation(songId: song.id);
+    lyrics = result?['lrc'];
+    trans = result?['trans'];
+
+    if (lyrics != null && lyrics.isNotEmpty) {
+      // 异步写回数据库，失败忽略
+      LyricsService().saveLyrics(
+        songId: song.id,
+        lyrics: lyrics,
+        title: song.title,
+        artist: song.artist,
+        translation: trans,
+      );
+    }
+    
+    return {'lyrics': lyrics, 'trans': trans};
+  }
+
+  /// 暂时存储歌词数据
+  void _storeLyricsData(String? lyrics, String? trans) {
+    _currentLyrics = lyrics;
   }
 
   void _loadLyrics() async {
@@ -84,118 +236,47 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     _currentSongId = song.id;
 
     try {
-      String? lyrics;
-      String? trans;
-      // 1) 优先使用 Song 对象中的歌词（如从“我喜欢”映射而来）
-      if (song.lyricsLrc != null && song.lyricsLrc!.isNotEmpty) {
-        lyrics = song.lyricsLrc;
-        Logger.debug('✅ 使用对象存储的歌词: ${song.title}');
-      }
-      // 2) 检查是否有本地下载的歌词文件
-      if (lyrics == null || lyrics.isEmpty) {
-        final downloaded = await _downloadService.getDownloadedSongs();
-        final downloadedSong = downloaded.where((d) => d.id == song.id).firstOrNull;
-        if (downloadedSong?.localLyricsPath != null) {
-          try {
-            final lyricsFile = File(downloadedSong!.localLyricsPath!);
-            if (await lyricsFile.exists()) {
-              lyrics = await lyricsFile.readAsString();
-              Logger.debug('✅ 使用本地下载的歌词: ${song.title}');
-            }
-          } catch (e) {
-            Logger.warning('读取本地歌词失败: $e', 'PlayerScreen');
-          }
-        }
-        // 同时读取本地翻译文件
-        if (downloadedSong?.localTransPath != null) {
-          try {
-            final transFile = File(downloadedSong!.localTransPath!);
-            if (await transFile.exists()) {
-              trans = await transFile.readAsString();
-              Logger.debug('✅ 使用本地下载的翻译: ${song.title}');
-            }
-          } catch (e) {
-            Logger.warning('读取本地翻译失败: $e', 'PlayerScreen');
-          }
-        }
-      }
-      // 3) 其次从数据库读取歌词和翻译
-      if (lyrics == null || lyrics.isEmpty || trans == null || trans.isEmpty) {
-        final dbResult = await LyricsService().getLyricsWithTranslation(song.id);
-        if (dbResult != null) {
-          if (lyrics == null || lyrics.isEmpty) {
-            lyrics = dbResult['lrc'];
-            if (lyrics != null && lyrics.isNotEmpty) {
-              Logger.debug('✅ 从数据库读取歌词: ${song.title}');
-            }
-          }
-          if (trans == null || trans.isEmpty) {
-            trans = dbResult['trans'];
-            if (trans != null && trans.isNotEmpty) {
-              Logger.debug('✅ 从数据库读取翻译: ${song.title}');
-            }
-          }
-        }
-      }
-      // 4) 最后回退到 API，并把结果写回数据库
-      if (lyrics == null || lyrics.isEmpty) {
-        Logger.debug('⚠️ 无本地歌词，使用API获取: ${song.title}');
-        final result = await _apiService.getLyricsWithTranslation(songId: song.id);
-        lyrics = result?['lrc'];
-        trans = result?['trans'];
-
-        if (lyrics != null && lyrics.isNotEmpty) {
-          // 🔧 优化:移除不必要的 ! 操作符
-          // 异步写回数据库，失败忽略
-          LyricsService().saveLyrics(
-            songId: song.id,
-            lyrics: lyrics,
-            title: song.title,
-            artist: song.artist,
-            translation: trans,
-          );
-        }
-      }
+      // 加载歌词和翻译数据
+      final result = await _loadLyricsData(song);
+      final lyrics = result['lyrics'];
+      final trans = result['trans'];
       
       if (mounted && lyrics != null && lyrics.isNotEmpty) {
         setState(() {
-          try {
-            _currentLyricsLrc = lyrics;
-            _currentLyricsTrans = trans;
-            final builder = LyricsModelBuilder.create().bindLyricToMain(lyrics!);
-            if (musicProvider.showLyricsTranslation && trans != null && trans.isNotEmpty) {
-              builder.bindLyricToExt(trans);
-            }
-            lyricModel = builder.getModel();
-          } catch (e) {
-            // 歌词解析失败，使用默认歌词
-            lyricModel = LyricsModelBuilder.create()
-                .bindLyricToMain('[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ')
-                .getModel();
-            _currentLyricsLrc = null;
-            _currentLyricsTrans = null;
-          }
+          _currentLyricsLrc = lyrics;
+          _currentLyricsTrans = trans;
+          _storeLyricsData(lyrics, trans);
+          // 更新歌词模型
+          lyricModel = LyricsModelBuilder.create()
+              .bindLyricToMain(lyrics)
+              .bindLyricToExt(trans ?? '')
+              .getModel();
         });
       } else {
         // 没有歌词，使用默认
         if (mounted) {
           setState(() {
+            _currentLyrics = '[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ';
+            _currentLyricsLrc = null;
+            _currentLyricsTrans = null;
+            // 更新歌词模型为默认状态
             lyricModel = LyricsModelBuilder.create()
                 .bindLyricToMain('[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ')
                 .getModel();
-            _currentLyricsLrc = null;
-            _currentLyricsTrans = null;
           });
         }
       }
     } catch (e) {
+      Logger.error('加载歌词失败', e, null, 'PlayerScreen');
       if (mounted) {
         setState(() {
+          _currentLyrics = '[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ';
+          _currentLyricsLrc = null;
+          _currentLyricsTrans = null;
+          // 更新歌词模型为默认状态
           lyricModel = LyricsModelBuilder.create()
               .bindLyricToMain('[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ')
               .getModel();
-          _currentLyricsLrc = null;
-          _currentLyricsTrans = null;
         });
       }
     }
@@ -241,35 +322,40 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               fit: StackFit.expand,
               children: [
                 // 背景封面（铺满并模糊）- 优先使用R2封面
-                CachedNetworkImage(
-                  imageUrl: song.r2CoverUrl ?? song.coverUrl,
+                Image.network(
+                  song.r2CoverUrl ?? song.coverUrl,
                   fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF2C2C2E),
-                          const Color(0xFF1C1C1E),
-                          Colors.black,
-                        ],
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            const Color(0xFF2C2C2E),
+                            const Color(0xFF1C1C1E),
+                            Colors.black,
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF2C2C2E),
-                          const Color(0xFF1C1C1E),
-                          Colors.black,
-                        ],
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            const Color(0xFF2C2C2E),
+                            const Color(0xFF1C1C1E),
+                            Colors.black,
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
                 // 模糊和暗化效果
                 BackdropFilter(
@@ -496,78 +582,15 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
   Widget _buildLyricsPreview() {
     return Consumer<MusicProvider>(
       builder: (context, musicProvider, child) {
-        dynamic displayModel = lyricModel;
-        if (_currentLyricsLrc != null && _currentLyricsLrc!.isNotEmpty) {
-          try {
-            final builder = LyricsModelBuilder.create().bindLyricToMain(_currentLyricsLrc!);
-            if (musicProvider.showLyricsTranslation &&
-                _currentLyricsTrans != null &&
-                _currentLyricsTrans!.isNotEmpty) {
-              builder.bindLyricToExt(_currentLyricsTrans!);
-            }
-            displayModel = builder.getModel();
-          } catch (_) {
-            // keep default lyricModel
-          }
-        }
-
-        // 如果歌词模型为空或没有歌词行，显示空状态
-        if (displayModel.lyrics.isEmpty) {
-          return Container(
-            height: 280,
-            alignment: Alignment.center,
-            child: Text(
-              '暂无歌词',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.3),
-                fontSize: 14,
-              ),
-            ),
-          );
-        }
-
         return Container(
           height: 280,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: LyricsReader(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            model: displayModel,
-            position: musicProvider.currentPosition.inMilliseconds,
+            model: lyricModel,
             lyricUi: lyricUI,
             playing: musicProvider.isPlaying,
-            size: const Size(double.infinity, 280),
-            emptyBuilder: () => Center(
-              child: Text(
-                '暂无歌词',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            selectLineBuilder: (progress, confirm) {
-              return Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.play_arrow, color: Colors.white),
-                    onPressed: () {
-                      confirm.call();
-                      musicProvider.seekTo(Duration(milliseconds: progress));
-                    },
-                  ),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      height: 2,
-                      width: double.infinity,
-                    ),
-                  ),
-                ],
-              );
-            },
+            position: musicProvider.currentPosition.inMilliseconds,
           ),
         );
       },

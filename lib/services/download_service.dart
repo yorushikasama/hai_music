@@ -168,15 +168,25 @@ class DownloadService {
         if (lyrics != null && lyrics.isNotEmpty) {
           final lyricsFileName = '$safeFileName.lrc';
           localLyricsPath = path.join(downloadDir.path, lyricsFileName);
-          await File(localLyricsPath).writeAsString(lyrics, encoding: utf8);
-          Logger.success('歌词下载成功', 'Download');
+          try {
+            await File(localLyricsPath).writeAsString(lyrics, encoding: utf8);
+            Logger.success('歌词下载成功', 'Download');
+          } catch (e) {
+            Logger.warning('保存歌词文件失败: $e', 'Download');
+            localLyricsPath = null;
+          }
 
           // 5. 如果有翻译,也保存到本地文件
           if (translation != null && translation.isNotEmpty) {
             final transFileName = '${safeFileName}_trans.lrc';
             localTransPath = path.join(downloadDir.path, transFileName);
-            await File(localTransPath).writeAsString(translation, encoding: utf8);
-            Logger.success('歌词翻译下载成功', 'Download');
+            try {
+              await File(localTransPath).writeAsString(translation, encoding: utf8);
+              Logger.success('歌词翻译下载成功', 'Download');
+            } catch (e) {
+              Logger.warning('保存翻译文件失败: $e', 'Download');
+              localTransPath = null;
+            }
           }
         } else {
           Logger.warning('未找到歌词', 'Download');

@@ -12,7 +12,8 @@ import '../extensions/duration_extension.dart';
 import '../widgets/mini_player.dart';
 import '../services/download_manager.dart';
 import 'download_progress_screen.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
+import '../utils/platform_utils.dart';
+import '../utils/window_utils.dart';
 
 /// 我喜欢的歌曲列表页面
 class FavoritesScreen extends StatefulWidget {
@@ -121,7 +122,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         behavior: HitTestBehavior.translucent,
                         onPanStart: !kIsWeb ? (_) {
                           try {
-                            appWindow.startDragging();
+                            // 使用WindowUtils处理平台特定的窗口操作
+                            WindowUtils.startDragging();
                           } catch (e) {
                             // 桌面平台支持窗口拖动
                           }

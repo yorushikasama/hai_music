@@ -7,6 +7,7 @@ class PlayHistory {
   final String coverUrl;
   final int? duration; // 时长（秒）
   final String? platform;
+  final String? lyricsTrans; // 歌词翻译
   final DateTime playedAt; // 播放时间
 
   PlayHistory({
@@ -17,6 +18,7 @@ class PlayHistory {
     required this.coverUrl,
     this.duration,
     this.platform,
+    this.lyricsTrans,
     DateTime? playedAt,
   }) : playedAt = playedAt ?? DateTime.now();
 
@@ -29,6 +31,7 @@ class PlayHistory {
       coverUrl: json['coverUrl'] ?? '',
       duration: json['duration'] ?? 0,
       platform: json['platform'],
+      lyricsTrans: json['lyricsTrans'],
       playedAt: json['playedAt'] != null 
           ? DateTime.parse(json['playedAt']) 
           : DateTime.now(),
@@ -44,6 +47,7 @@ class PlayHistory {
       'coverUrl': coverUrl,
       'duration': duration,
       'platform': platform,
+      'lyricsTrans': lyricsTrans,
       'playedAt': playedAt.toIso8601String(),
     };
   }

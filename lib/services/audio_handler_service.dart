@@ -709,6 +709,7 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
         'platform': song.platform,
         'r2CoverUrl': song.r2CoverUrl,
         'lyricsLrc': song.lyricsLrc,
+        'lyricsTrans': song.lyricsTrans,
       },
     );
   }
@@ -726,6 +727,7 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
       platform: mediaItem.extras?['platform'],
       r2CoverUrl: mediaItem.extras?['r2CoverUrl'],
       lyricsLrc: mediaItem.extras?['lyricsLrc'],
+      lyricsTrans: mediaItem.extras?['lyricsTrans'],
     );
   }
   

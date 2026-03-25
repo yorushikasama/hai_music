@@ -12,6 +12,7 @@ class FavoriteSong {
   final int? duration; // 时长（秒）
   final String? platform; // 来源平台
   final String? lyricsLrc; // LRC 格式歌词
+  final String? lyricsTrans; // 歌词翻译
   final DateTime createdAt; // 收藏时间
   final DateTime? syncedAt; // 最后同步时间
 
@@ -28,6 +29,7 @@ class FavoriteSong {
     this.duration,
     this.platform,
     this.lyricsLrc,
+    this.lyricsTrans,
     DateTime? createdAt,
     this.syncedAt,
   }) : createdAt = createdAt ?? DateTime.now();
@@ -46,6 +48,7 @@ class FavoriteSong {
       duration: json['duration'] ?? 0,
       platform: json['platform'],
       lyricsLrc: json['lyrics_lrc'],
+      lyricsTrans: json['lyrics_translation'],
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at']) 
           : DateTime.now(),
@@ -69,6 +72,7 @@ class FavoriteSong {
       'duration': duration,
       'platform': platform,
       'lyrics_lrc': lyricsLrc,
+      'lyrics_translation': lyricsTrans,
       'sync_status': 'synced',
       'play_count': 0,
       'created_at': createdAt.toIso8601String(),
@@ -89,6 +93,7 @@ class FavoriteSong {
     int? duration,
     String? platform,
     String? lyricsLrc,
+    String? lyricsTrans,
     DateTime? createdAt,
     DateTime? syncedAt,
   }) {
@@ -105,6 +110,7 @@ class FavoriteSong {
       duration: duration ?? this.duration,
       platform: platform ?? this.platform,
       lyricsLrc: lyricsLrc ?? this.lyricsLrc,
+      lyricsTrans: lyricsTrans ?? this.lyricsTrans,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
     );
