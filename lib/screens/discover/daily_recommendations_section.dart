@@ -1,7 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../models/song.dart';
 import '../../providers/music_provider.dart';
@@ -17,11 +17,7 @@ class DailyRecommendationsSection extends StatelessWidget {
   final VoidCallback onRefresh;
 
   const DailyRecommendationsSection({
-    super.key,
-    required this.dailyRecommendations,
-    required this.isLoading,
-    required this.scrollController,
-    required this.onRefresh,
+    required this.dailyRecommendations, required this.isLoading, required this.scrollController, required this.onRefresh, super.key,
   });
 
   @override
@@ -294,14 +290,14 @@ class _LargeSongCard extends StatelessWidget {
                   ),
                 ),
               ),
-              SizedBox(height: AppStyles.spacingM),
+              const SizedBox(height: AppStyles.spacingM),
               Text(
                 song.title,
                 style: Theme.of(context).textTheme.titleMedium,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              SizedBox(height: AppStyles.spacingXS),
+              const SizedBox(height: AppStyles.spacingXS),
               Text(
                 song.artist,
                 style: Theme.of(context).textTheme.bodySmall,

@@ -1,31 +1,37 @@
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:just_audio/just_audio.dart';
-import '../models/song.dart';
-import '../models/favorite_song.dart';
-import '../models/storage_config.dart';
+import 'package:path/path.dart' as path;
+
 import '../config/app_constants.dart';
+import '../models/audio_quality.dart';
+import '../models/favorite_song.dart';
+import '../models/song.dart';
+import '../models/storage_config.dart';
 import '../utils/logger.dart';
-import 'supabase_service.dart';
+import 'audio_quality_service.dart';
+import 'dio_client.dart';
+import 'music_api_service.dart';
+import 'preferences_service.dart';
 import 'r2_storage_service.dart';
 import 'storage_config_service.dart';
-import 'preferences_service.dart';
-import 'music_api_service.dart';
+import 'storage_path_manager.dart';
+import 'supabase_service.dart';
 
 /// 收藏管理服务
 /// 负责协调本地存储、数据库和对象存储
 class FavoriteManagerService {
   static final FavoriteManagerService _instance = FavoriteManagerService._internal();
-  
+
   final SupabaseService _supabase = SupabaseService();
   final R2StorageService _r2 = R2StorageService();
   final StorageConfigService _configService = StorageConfigService();
   final PreferencesService _prefs = PreferencesService();
   final MusicApiService _apiService = MusicApiService();
-  final Dio _dio = Dio();
+  final StoragePathManager _pathManager = StoragePathManager();
+  final Dio _dio = DioClient().dio;
 
   bool _initialized = false;
   StorageConfig? _config;
@@ -41,13 +47,15 @@ class FavoriteManagerService {
     try {
       await _configService.init();
       await _prefs.init();
-      
-      _config = _configService.getConfig();
-      
-      if (_config != null && _config!.isValid && _config!.enableSync) {
-        // 初始化 Supabase 和 R2
+
+      _config = await _configService.getConfigAsync();
+
+      // 只要配置有效就初始化 Supabase（不依赖 enableSync 开关）
+      if (_config != null && _config!.isValid) {
         await _supabase.initialize(_config!);
-        await _r2.initialize(_config!);
+        if (_config!.enableSync) {
+          await _r2.initialize(_config!);
+        }
       }
 
       _initialized = true;
@@ -58,14 +66,27 @@ class FavoriteManagerService {
     }
   }
 
+  /// 确保 Supabase 已初始化（懒初始化）
+  Future<bool> _ensureSupabaseReady() async {
+    if (_supabase.isInitialized) return true;
+
+    // 尝试用现有配置初始化
+    _config ??= await _configService.getConfigAsync();
+    if (_config != null && _config!.isValid) {
+      return await _supabase.initialize(_config!);
+    }
+    return false;
+  }
+
   /// 检查是否启用云端同步
   bool get isSyncEnabled => _config?.enableSync ?? false;
 
   /// 添加收藏
-  /// [song] 要收藏的歌曲
-  /// [audioQuality] 音频音质（可选，默认使用臻品母带）
-  Future<bool> addFavorite(Song song, {int? audioQuality}) async {
+  Future<bool> addFavorite(Song song, {AudioQuality? audioQuality}) async {
     if (!_initialized) await initialize();
+
+    // 确保 Supabase 可用
+    await _ensureSupabaseReady();
 
     try {
       // 1. 添加到本地收藏列表
@@ -76,17 +97,11 @@ class FavoriteManagerService {
         await _syncToCloud(song, audioQuality: audioQuality);
       } else {
         // 未启用云端同步时，也保存基本信息到数据库
-        // 获取歌词
         String? lyricsLrc = song.lyricsLrc;
         if (lyricsLrc == null || lyricsLrc.isEmpty) {
           lyricsLrc = await _apiService.getLyrics(songId: song.id);
-          if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
-            Logger.success('歌词获取成功', 'FavoriteManager');
-          } else {
-            Logger.warning('未获取到歌词', 'FavoriteManager');
-          }
         }
-        
+
         final favoriteSong = FavoriteSong(
           id: song.id,
           title: song.title,
@@ -99,7 +114,7 @@ class FavoriteManagerService {
           syncedAt: DateTime.now(),
         );
         await _supabase.addFavorite(favoriteSong);
-        Logger.success('收藏信息已保存到数据库', 'FavoriteManager');
+        Logger.database('收藏信息已保存到数据库', 'FavoriteManager');
       }
 
       return true;
@@ -110,21 +125,14 @@ class FavoriteManagerService {
   }
 
   /// 同步收藏到云端
-  /// [song] 要同步的歌曲
-  /// [audioQuality] 音频音质（可选，默认使用臻品母带）
-  Future<void> _syncToCloud(Song song, {int? audioQuality}) async {
+  Future<void> _syncToCloud(Song song, {AudioQuality? audioQuality}) async {
     try {
       // 1. 获取歌词（如果 song 中没有）
       String? lyricsLrc = song.lyricsLrc;
       if (lyricsLrc == null || lyricsLrc.isEmpty) {
         lyricsLrc = await _apiService.getLyrics(songId: song.id);
-        if (lyricsLrc != null && lyricsLrc.isNotEmpty) {
-          Logger.success('歌词获取成功', 'FavoriteManager');
-        } else {
-          Logger.warning('未获取到歌词', 'FavoriteManager');
-        }
       }
-      
+
       // 2. 下载音频和封面到本地
       final audioFile = await _downloadAudio(song, audioQuality: audioQuality);
       final coverFile = await _downloadCover(song);
@@ -133,7 +141,7 @@ class FavoriteManagerService {
       int durationSeconds = song.duration ?? 0;
       if (audioFile != null && durationSeconds == 0) {
         durationSeconds = await _getAudioDuration(audioFile);
-        }
+      }
 
       // 4. 上传到 R2
       String? r2AudioUrl;
@@ -141,11 +149,11 @@ class FavoriteManagerService {
 
       if (audioFile != null) {
         r2AudioUrl = await _r2.uploadAudio(audioFile, song.id);
-        }
+      }
 
       if (coverFile != null) {
         r2CoverUrl = await _r2.uploadCover(coverFile, song.id);
-        }
+      }
 
       // 5. 保存到 Supabase 数据库
       final favoriteSong = FavoriteSong(
@@ -160,44 +168,39 @@ class FavoriteManagerService {
         r2CoverUrl: r2CoverUrl,
         duration: durationSeconds > 0 ? durationSeconds : AppConstants.defaultSongDuration,
         platform: song.platform,
-        lyricsLrc: lyricsLrc, // 保存获取到的歌词
+        lyricsLrc: lyricsLrc,
         syncedAt: DateTime.now(),
       );
 
       await _supabase.addFavorite(favoriteSong);
-      
-      Logger.success('歌曲已成功同步到云端: ${song.title}', 'FavoriteManager');
+
+      Logger.success('歌曲已同步到云端: ${song.title}', 'FavoriteManager');
     } catch (e) {
       Logger.error('同步到云端失败', e, null, 'FavoriteManager');
     }
   }
 
   /// 下载音频文件
-  /// [song] 要下载的歌曲
-  /// [audioQuality] 音频音质（可选，默认使用臻品母带）
-  Future<File?> _downloadAudio(Song song, {int? audioQuality}) async {
+  Future<File?> _downloadAudio(Song song, {AudioQuality? audioQuality}) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final audioDir = Directory(path.join(dir.path, AppConstants.musicFolder, AppConstants.audioFolder));
-      await audioDir.create(recursive: true);
+      final audioDir = await _pathManager.getMusicAudioDir();
 
-      final fileName = '${song.id}${AppConstants.audioExtension}';
+      final quality = audioQuality ?? AudioQualityService.instance.getCurrentQuality();
+      final fileName = '${song.id}${quality.fileExtension}';
       final filePath = path.join(audioDir.path, fileName);
       final file = File(filePath);
 
       // 如果文件已存在，直接返回
-      if (await file.exists()) {
+      if (file.existsSync()) {
         return file;
       }
 
       // 获取真实的音频URL
-      String? audioUrl = song.audioUrl;
-      if (audioUrl.isEmpty) {
-        // 使用传入的音质，如果没有则使用臻品母带
-        final quality = audioQuality ?? AppConstants.qualityLossless;
+      String? audioUrl = song.audioUrl.isNotEmpty ? song.audioUrl : null;
+      if (audioUrl == null) {
         audioUrl = await _apiService.getSongUrl(
           songId: song.id,
-          quality: quality,
+          quality: quality.value,
         );
       }
 
@@ -221,16 +224,14 @@ class FavoriteManagerService {
     try {
       if (song.coverUrl.isEmpty) return null;
 
-      final dir = await getApplicationDocumentsDirectory();
-      final coverDir = Directory(path.join(dir.path, AppConstants.musicFolder, AppConstants.coverFolder));
-      await coverDir.create(recursive: true);
+      final coverDir = await _pathManager.getMusicCoversDir();
 
       final fileName = '${song.id}${AppConstants.coverExtension}';
       final filePath = path.join(coverDir.path, fileName);
       final file = File(filePath);
 
       // 如果文件已存在，直接返回
-      if (await file.exists()) {
+      if (file.existsSync()) {
         return file;
       }
 
@@ -249,12 +250,12 @@ class FavoriteManagerService {
     try {
       player = AudioPlayer();
       await player.setFilePath(audioFile.path);
-      
+
       // 等待时长加载
       final durationFuture = player.durationFuture;
       if (durationFuture != null) {
         final duration = await durationFuture.timeout(
-          Duration(seconds: AppConstants.audioDurationTimeout),
+          const Duration(seconds: AppConstants.audioDurationTimeout),
           onTimeout: () => null,
         );
         await player.dispose();
@@ -274,19 +275,25 @@ class FavoriteManagerService {
   Future<bool> removeFavorite(String songId) async {
     if (!_initialized) await initialize();
 
+    // 确保 Supabase 可用
+    await _ensureSupabaseReady();
+
     try {
       // 1. 从本地收藏列表移除
       await _prefs.removeFavorite(songId);
 
-      // 2. 从数据库删除（无论是否启用云端同步）
-      await _supabase.removeFavorite(songId);
-
-      // 3. 如果启用云端同步，则删除 R2 文件
+      // 2. 从 Supabase 删除
       if (isSyncEnabled) {
+        await _supabase.removeFavorite(songId);
         await _r2.deleteSongFiles(songId);
+      } else {
+        try {
+          await _supabase.removeFavorite(songId);
+        } catch (e) {
+          Logger.warning('Supabase 移除收藏失败: $songId', 'FavoriteManager');
+        }
       }
 
-      // 4. 删除本地文件
       await _deleteLocalFiles(songId);
 
       return true;
@@ -299,18 +306,16 @@ class FavoriteManagerService {
   /// 删除本地文件
   Future<void> _deleteLocalFiles(String songId) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      
-      // 删除音频文件
-      final audioFile = File(path.join(dir.path, AppConstants.musicFolder, AppConstants.audioFolder, '$songId${AppConstants.audioExtension}'));
-      if (await audioFile.exists()) {
-        await audioFile.delete();
+      final audioPath = await _pathManager.getAudioFilePath(songId);
+      final audioFile = File(audioPath);
+      if (audioFile.existsSync()) {
+        audioFile.deleteSync();
       }
 
-      // 删除封面文件
-      final coverFile = File(path.join(dir.path, AppConstants.musicFolder, AppConstants.coverFolder, '$songId${AppConstants.coverExtension}'));
-      if (await coverFile.exists()) {
-        await coverFile.delete();
+      final coverPath = await _pathManager.getCoverFilePath(songId);
+      final coverFile = File(coverPath);
+      if (coverFile.existsSync()) {
+        coverFile.deleteSync();
       }
     } catch (e) {
       Logger.error('删除本地文件失败', e, null, 'FavoriteManager');
@@ -319,25 +324,22 @@ class FavoriteManagerService {
 
   /// 获取所有收藏
   Future<List<FavoriteSong>> getFavorites() async {
-    if (!_initialized) {
-      await initialize();
-    }
+    if (!_initialized) await initialize();
+
+    // 确保 Supabase 可用
+    await _ensureSupabaseReady();
 
     try {
-      if (isSyncEnabled) {
-        // 从云端获取
+      if (_supabase.isInitialized) {
         final favorites = await _supabase.getFavorites();
-        
-        // 🔧 修复：同步更新 SharedPreferences 中的 ID 列表，确保 MusicProvider 的收藏状态正确
+
+        // 同步更新 SharedPreferences 中的 ID 列表
         final favoriteIds = favorites.map((f) => f.id).toList();
         await _prefs.setFavoriteSongs(favoriteIds);
-        Logger.success('已同步 ${favoriteIds.length} 个收藏ID到本地存储', 'FavoriteManager');
-        
+
         return favorites;
       } else {
-        // 从本地获取（只有ID列表）
-        // 注意：本地模式下无法获取完整的歌曲信息
-        // 需要配合其他服务来获取歌曲详情
+        Logger.warning('Supabase 未初始化，无法获取收藏列表', 'FavoriteManager');
         return [];
       }
     } catch (e) {
@@ -354,46 +356,27 @@ class FavoriteManagerService {
     return _prefs.isFavorite(songId);
   }
 
-  /// 获取本地收藏的歌曲ID列表
-  List<String> getLocalFavoriteIds() {
-    return _prefs.getFavorites();
-  }
-
   /// 更新配置
   Future<bool> updateConfig(StorageConfig config) async {
     try {
-      // 保存配置到本地
       final saveSuccess = await _configService.saveConfig(config);
       if (!saveSuccess) {
         Logger.error('配置保存到本地失败', null, null, 'FavoriteManager');
         return false;
       }
-      
-      Logger.success('配置已保存到本地', 'FavoriteManager');
-      
-      // 更新内存中的配置
+
       _config = config;
+      _initialized = false;
+      _supabase.dispose();
 
-      // 如果启用了云端同步，初始化云端服务
-      if (config.isValid && config.enableSync) {
-        try {
-          await _supabase.initialize(config);
-          Logger.success('Supabase 初始化成功', 'FavoriteManager');
-        } catch (e) {
-          Logger.error('Supabase 初始化失败', e, null, 'FavoriteManager');
-          // 继续尝试初始化 R2
-        }
-        
-        try {
+      if (config.isValid) {
+        await _supabase.initialize(config);
+        if (config.enableSync) {
           await _r2.initialize(config);
-          Logger.success('R2 初始化成功', 'FavoriteManager');
-        } catch (e) {
-          Logger.error('R2 初始化失败', e, null, 'FavoriteManager');
-          // 即使 R2 初始化失败，配置也已保存
         }
-      } else {
-        }
+      }
 
+      _initialized = true;
       Logger.success('配置更新完成', 'FavoriteManager');
       return true;
     } catch (e) {
@@ -402,43 +385,70 @@ class FavoriteManagerService {
     }
   }
 
-  /// 获取当前配置
+  final Set<String> _operationInProgress = {};
+
+  bool isOperationInProgress(String songId) => _operationInProgress.contains(songId);
+
+  Future<bool> toggleFavorite(String songId, Song? song, List<Song> playlist) async {
+    if (_operationInProgress.contains(songId)) {
+      Logger.warning('收藏操作正在进行中，请稍候...', 'FavoriteManager');
+      return false;
+    }
+
+    _operationInProgress.add(songId);
+
+    try {
+      final isFav = _prefs.isFavorite(songId);
+
+      if (isFav) {
+        final success = await removeFavorite(songId);
+        if (success) {
+          Logger.database('取消收藏: $songId', 'FavoriteManager');
+        }
+        return success;
+      } else {
+        Song? targetSong = song;
+        if (targetSong == null || targetSong.id != songId) {
+          final idx = playlist.indexWhere((s) => s.id == songId);
+          if (idx >= 0) {
+            targetSong = playlist[idx];
+          }
+        }
+
+        if (targetSong == null) {
+          Logger.error('找不到要收藏的歌曲: $songId', null, null, 'FavoriteManager');
+          return false;
+        }
+
+        final success = await addFavorite(targetSong);
+        if (success) {
+          Logger.database('添加收藏: ${targetSong.title}', 'FavoriteManager');
+        }
+        return success;
+      }
+    } catch (e) {
+      Logger.error('收藏操作异常', e, null, 'FavoriteManager');
+      return false;
+    } finally {
+      _operationInProgress.remove(songId);
+    }
+  }
+
   StorageConfig getConfig() {
     return _config ?? StorageConfig.empty();
   }
 
-  /// 同步所有本地收藏到云端
-  Future<void> syncAllToCloud(List<Song> songs, {int? audioQuality}) async {
-    if (!isSyncEnabled) return;
-
-    final favoriteIds = _prefs.getFavorites();
-    final favoriteSongs = songs.where((s) => favoriteIds.contains(s.id)).toList();
-
-    for (final song in favoriteSongs) {
-      await _syncToCloud(song, audioQuality: audioQuality);
-    }
-  }
-
-  /// 从云端同步到本地
-  Future<void> syncFromCloud() async {
-    if (!isSyncEnabled) return;
-
-    try {
-      final cloudFavorites = await _supabase.getFavorites();
-      final localIds = cloudFavorites.map((f) => f.id).toList();
-      
-      await _prefs.setFavoriteSongs(localIds);
-    } catch (e) {
-      Logger.error('从云端同步失败', e, null, 'FavoriteManager');
-    }
+  Future<StorageConfig> getConfigAsync() async {
+    _config ??= await _configService.getConfigAsync();
+    return _config ?? StorageConfig.empty();
   }
 
   /// 清除所有收藏
   Future<bool> clearAll() async {
     try {
       await _prefs.setFavoriteSongs([]);
-      
-      if (isSyncEnabled) {
+
+      if (_supabase.isInitialized) {
         await _supabase.clearAllFavorites();
       }
 

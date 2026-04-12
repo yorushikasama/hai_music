@@ -26,26 +26,7 @@ class DownloadedHeader extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
 
   const DownloadedHeader({
-    super.key,
-    required this.tabController,
-    required this.downloadedCount,
-    required this.localCount,
-    required this.isSearching,
-    required this.isSelectionMode,
-    required this.selectedCount,
-    required this.currentTabIndex,
-    required this.totalSizeLabel,
-    required this.hasSongsInCurrentTab,
-    required this.searchController,
-    required this.onBack,
-    required this.onToggleSearch,
-    required this.onEnterSelectionMode,
-    required this.onCancelSelection,
-    required this.onToggleSelectAll,
-    required this.onBatchDelete,
-    required this.onScanLocalAudio,
-    required this.onRefreshDownloaded,
-    required this.onSearchChanged,
+    required this.tabController, required this.downloadedCount, required this.localCount, required this.isSearching, required this.isSelectionMode, required this.selectedCount, required this.currentTabIndex, required this.totalSizeLabel, required this.hasSongsInCurrentTab, required this.searchController, required this.onBack, required this.onToggleSearch, required this.onEnterSelectionMode, required this.onCancelSelection, required this.onToggleSelectAll, required this.onBatchDelete, required this.onScanLocalAudio, required this.onRefreshDownloaded, required this.onSearchChanged, super.key,
   });
 
   @override

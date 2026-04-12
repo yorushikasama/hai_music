@@ -4,11 +4,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../extensions/duration_extension.dart';
 import '../../models/downloaded_song.dart';
 import '../../providers/music_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../theme/app_styles.dart';
-import '../../extensions/duration_extension.dart';
 
 /// 下载页面的歌曲列表区域（含多选支持）
 class DownloadedSongsListSection extends StatelessWidget {
@@ -23,16 +23,7 @@ class DownloadedSongsListSection extends StatelessWidget {
   final void Function(DownloadedSong song) onDelete;
 
   const DownloadedSongsListSection({
-    super.key,
-    required this.songs,
-    required this.isSelectionMode,
-    required this.selectedIds,
-    required this.currentPlayingId,
-    required this.isPlayingNow,
-    required this.bottomPadding,
-    required this.onSelectionChanged,
-    required this.onPlay,
-    required this.onDelete,
+    required this.songs, required this.isSelectionMode, required this.selectedIds, required this.currentPlayingId, required this.isPlayingNow, required this.bottomPadding, required this.onSelectionChanged, required this.onPlay, required this.onDelete, super.key,
   });
 
   @override
@@ -108,7 +99,6 @@ class _DownloadedSongTile extends StatelessWidget {
           color: isPlaying
               ? colors.accent.withValues(alpha: 0.3)
               : colors.border.withValues(alpha: 0.1),
-          width: 1,
         ),
         boxShadow: [
           BoxShadow(
@@ -138,7 +128,7 @@ class _DownloadedSongTile extends StatelessWidget {
                   Checkbox(
                     value: isSelected,
                     onChanged: (value) {
-                      onSelectionChanged(downloadedSong, value == true);
+                      onSelectionChanged(downloadedSong, value ?? false);
                     },
                     activeColor: colors.accent,
                   )

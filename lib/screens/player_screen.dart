@@ -1,20 +1,23 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:ui';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_lyric/lyrics_reader.dart';
-import 'package:flutter_lyric/lyrics_model_builder.dart';
+import 'package:flutter_lyric/lyrics_reader_model.dart';
+import 'package:provider/provider.dart';
 
-import '../utils/logger.dart';
+import '../providers/audio_settings_provider.dart';
 import '../providers/music_provider.dart';
-import '../services/music_api_service.dart';
-import '../services/lyrics_service.dart';
+import '../providers/sleep_timer_provider.dart';
+import '../providers/theme_provider.dart';
 import '../services/download_service.dart';
-import '../widgets/draggable_window_area.dart';
+import '../services/lyrics_loading_service.dart';
+import '../theme/app_styles.dart';
+import '../utils/logger.dart';
 import '../utils/platform_utils.dart';
-
+import '../widgets/draggable_window_area.dart';
 import 'player/player_bottom_sheets.dart';
 import 'player/player_controls.dart';
 
@@ -27,28 +30,26 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderStateMixin {
-  final _apiService = MusicApiService();
-  final _downloadService = DownloadService();
+  static const String _defaultLyrics = '[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ';
+  static const String _loadingLyrics = '[00:00.00]加载中...\n[00:01.00] \n[00:02.00] ';
+
+  final _lyricsLoadingService = LyricsLoadingService();
   late AnimationController _rotationController;
-  String? _currentSongId; // 追踪当前歌曲 ID
+  String? _currentSongId;
 
   String? _currentLyricsLrc;
   String? _currentLyricsTrans;
 
-  // 自定义歌词UI样式
   final lyricUI = UINetease(
     defaultSize: 16,
     defaultExtSize: 20,
     otherMainSize: 14,
-    bias: 0.5,
     lineGap: 20,
     inlineGap: 10,
-    lyricAlign: LyricAlign.CENTER,
-    highlightDirection: HighlightDirection.LTR,
   );
 
-  var lyricModel = LyricsModelBuilder.create()
-      .bindLyricToMain('[00:00.00]加载中...\n[00:01.00] \n[00:02.00] ')
+  LyricsReaderModel lyricModel = LyricsModelBuilder.create()
+      .bindLyricToMain(_loadingLyrics)
       .getModel();
 
   @override
@@ -58,9 +59,8 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
       duration: const Duration(seconds: 20),
       vsync: this,
     )..repeat();
-    // 延迟加载歌词，确保 MusicProvider 已经更新
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadLyrics();
+      unawaited(_loadLyrics());
     });
   }
 
@@ -70,129 +70,52 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     super.dispose();
   }
 
-  void _loadLyrics() async {
+  Future<void> _loadLyrics() async {
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
     final song = musicProvider.currentSong;
     if (song == null) return;
 
-    // 如果歌曲没有变化，不重复加载
-    if (song.id == _currentSongId) {
-      return;
-    }
+    if (song.id == _currentSongId) return;
 
-    // 更新当前歌曲 ID
     _currentSongId = song.id;
 
     try {
-      String? lyrics;
-      String? trans;
-      // 1) 优先使用 Song 对象中的歌词（如从“我喜欢”映射而来）
-      if (song.lyricsLrc != null && song.lyricsLrc!.isNotEmpty) {
-        lyrics = song.lyricsLrc;
-        Logger.debug('✅ 使用对象存储的歌词: ${song.title}');
-      }
-      // 2) 检查是否有本地下载的歌词文件
-      if (lyrics == null || lyrics.isEmpty) {
-        final downloaded = await _downloadService.getDownloadedSongs();
-        final downloadedSong = downloaded.where((d) => d.id == song.id).firstOrNull;
-        if (downloadedSong?.localLyricsPath != null) {
-          try {
-            final lyricsFile = File(downloadedSong!.localLyricsPath!);
-            if (await lyricsFile.exists()) {
-              lyrics = await lyricsFile.readAsString();
-              Logger.debug('✅ 使用本地下载的歌词: ${song.title}');
-            }
-          } catch (e) {
-            Logger.warning('读取本地歌词失败: $e', 'PlayerScreen');
-          }
-        }
-        // 同时读取本地翻译文件
-        if (downloadedSong?.localTransPath != null) {
-          try {
-            final transFile = File(downloadedSong!.localTransPath!);
-            if (await transFile.exists()) {
-              trans = await transFile.readAsString();
-              Logger.debug('✅ 使用本地下载的翻译: ${song.title}');
-            }
-          } catch (e) {
-            Logger.warning('读取本地翻译失败: $e', 'PlayerScreen');
-          }
-        }
-      }
-      // 3) 其次从数据库读取歌词和翻译
-      if (lyrics == null || lyrics.isEmpty || trans == null || trans.isEmpty) {
-        final dbResult = await LyricsService().getLyricsWithTranslation(song.id);
-        if (dbResult != null) {
-          if (lyrics == null || lyrics.isEmpty) {
-            lyrics = dbResult['lrc'];
-            if (lyrics != null && lyrics.isNotEmpty) {
-              Logger.debug('✅ 从数据库读取歌词: ${song.title}');
-            }
-          }
-          if (trans == null || trans.isEmpty) {
-            trans = dbResult['trans'];
-            if (trans != null && trans.isNotEmpty) {
-              Logger.debug('✅ 从数据库读取翻译: ${song.title}');
-            }
-          }
-        }
-      }
-      // 4) 最后回退到 API，并把结果写回数据库
-      if (lyrics == null || lyrics.isEmpty) {
-        Logger.debug('⚠️ 无本地歌词，使用API获取: ${song.title}');
-        final result = await _apiService.getLyricsWithTranslation(songId: song.id);
-        lyrics = result?['lrc'];
-        trans = result?['trans'];
+      final result = await _lyricsLoadingService.loadLyrics(song);
 
-        if (lyrics != null && lyrics.isNotEmpty) {
-          // 🔧 优化:移除不必要的 ! 操作符
-          // 异步写回数据库，失败忽略
-          LyricsService().saveLyrics(
-            songId: song.id,
-            lyrics: lyrics,
-            title: song.title,
-            artist: song.artist,
-            translation: trans,
-          );
-        }
-      }
-      
-      if (mounted && lyrics != null && lyrics.isNotEmpty) {
+      if (!mounted) return;
+
+      if (result != null && result.hasLyrics) {
         setState(() {
           try {
-            _currentLyricsLrc = lyrics;
-            _currentLyricsTrans = trans;
-            final builder = LyricsModelBuilder.create().bindLyricToMain(lyrics!);
-            if (musicProvider.showLyricsTranslation && trans != null && trans.isNotEmpty) {
-              builder.bindLyricToExt(trans);
+            _currentLyricsLrc = result.lrc;
+            _currentLyricsTrans = result.trans;
+            final builder = LyricsModelBuilder.create().bindLyricToMain(result.lrc!);
+            if (Provider.of<AudioSettingsProvider>(context, listen: false).showLyricsTranslation && result.hasTranslation) {
+              builder.bindLyricToExt(result.trans!);
             }
             lyricModel = builder.getModel();
           } catch (e) {
-            // 歌词解析失败，使用默认歌词
             lyricModel = LyricsModelBuilder.create()
-                .bindLyricToMain('[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ')
+                .bindLyricToMain(_defaultLyrics)
                 .getModel();
             _currentLyricsLrc = null;
             _currentLyricsTrans = null;
           }
         });
       } else {
-        // 没有歌词，使用默认
-        if (mounted) {
-          setState(() {
-            lyricModel = LyricsModelBuilder.create()
-                .bindLyricToMain('[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ')
-                .getModel();
-            _currentLyricsLrc = null;
-            _currentLyricsTrans = null;
-          });
-        }
+        setState(() {
+          lyricModel = LyricsModelBuilder.create()
+              .bindLyricToMain(_defaultLyrics)
+              .getModel();
+          _currentLyricsLrc = null;
+          _currentLyricsTrans = null;
+        });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           lyricModel = LyricsModelBuilder.create()
-              .bindLyricToMain('[00:00.00]暂无歌词\n[00:01.00] \n[00:02.00] ')
+              .bindLyricToMain(_defaultLyrics)
               .getModel();
           _currentLyricsLrc = null;
           _currentLyricsTrans = null;
@@ -203,32 +126,33 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final colors = Provider.of<ThemeProvider>(context).colors;
+    final systemUiStyle = colors.isLight ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light;
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+      value: systemUiStyle,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: colors.background,
         extendBodyBehindAppBar: true,
         body: Consumer<MusicProvider>(
           builder: (context, musicProvider, child) {
             final song = musicProvider.currentSong;
-            
-            // 检查歌曲是否变化，如果变化则重新加载歌词
+
             if (song != null && song.id != _currentSongId) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                _loadLyrics();
+                unawaited(_loadLyrics());
               });
             }
-            
+
             if (song == null) {
-              return const Center(
+              return Center(
                 child: Text(
                   '没有正在播放的歌曲',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: colors.textSecondary),
                 ),
               );
             }
 
-            // 控制旋转动画
             if (musicProvider.isPlaying) {
               if (!_rotationController.isAnimating) {
                 _rotationController.repeat();
@@ -240,51 +164,39 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             return Stack(
               fit: StackFit.expand,
               children: [
-                // 背景封面（铺满并模糊）- 优先使用R2封面
                 CachedNetworkImage(
                   imageUrl: song.r2CoverUrl ?? song.coverUrl,
                   fit: BoxFit.cover,
                   placeholder: (context, url) => Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
+                      gradient: colors.backgroundGradient ?? LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF2C2C2E),
-                          const Color(0xFF1C1C1E),
-                          Colors.black,
-                        ],
+                        colors: [colors.surface, colors.background],
                       ),
                     ),
                   ),
                   errorWidget: (context, url, error) => Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
+                      gradient: colors.backgroundGradient ?? LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF2C2C2E),
-                          const Color(0xFF1C1C1E),
-                          Colors.black,
-                        ],
+                        colors: [colors.surface, colors.background],
                       ),
                     ),
                   ),
                 ),
-                // 模糊和暗化效果
                 BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                   child: Container(
-                    color: Colors.black.withValues(alpha: 0.5),
+                    color: colors.background.withValues(alpha: 0.5),
                   ),
                 ),
-                // 内容
                 SafeArea(
                   child: Column(
                     children: [
-                      _buildAppBar(context),
-                      // 定时器状态显示
-                      _buildSleepTimerIndicator(context, musicProvider),
+                      _buildAppBar(context, colors),
+                      _buildSleepTimerIndicator(context, musicProvider, colors),
                       Expanded(
                         child: Center(
                           child: SingleChildScrollView(
@@ -293,9 +205,9 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 const SizedBox(height: 40),
-                                _buildSongInfo(song.title, song.artist),
+                                _buildSongInfo(song.title, song.artist, colors),
                                 const SizedBox(height: 32),
-                                _buildLyricsPreview(),
+                                _buildLyricsPreview(colors),
                                 const SizedBox(height: 60),
                               ],
                             ),
@@ -304,7 +216,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                       ),
                       PlayerControlPanel(
                         musicProvider: musicProvider,
-                        downloadService: _downloadService,
+                        downloadService: DownloadService(),
                       ),
                     ],
                   ),
@@ -317,13 +229,12 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildAppBar(BuildContext context) {
+  Widget _buildAppBar(BuildContext context, ThemeColors colors) {
     final isDesktop = PlatformUtils.isDesktop;
     final isAndroid = PlatformUtils.isAndroid;
 
     return Stack(
       children: [
-        // 桌面端拖动区域
         if (isDesktop)
           const Positioned(
             top: 0,
@@ -334,7 +245,6 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               child: SizedBox.expand(),
             ),
           ),
-        // AppBar 内容
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: Row(
@@ -342,53 +252,50 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             children: [
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: colors.textPrimary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.expand_more, color: Colors.white, size: 28),
+                  icon: Icon(Icons.expand_more, color: colors.textPrimary, size: 28),
                   onPressed: () => Navigator.pop(context),
                 ),
               ),
-              // 桌面端和 Android 端都显示翻译开关
-              Consumer<MusicProvider>(
-                builder: (context, musicProvider, child) {
+              Consumer<AudioSettingsProvider>(
+                builder: (context, audioSettings, child) {
                   return Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
+                      color: colors.textPrimary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: IconButton(
                       icon: Icon(
-                        musicProvider.showLyricsTranslation
+                        audioSettings.showLyricsTranslation
                             ? Icons.translate_rounded
                             : Icons.translate_outlined,
-                        color: musicProvider.showLyricsTranslation
-                            ? Colors.orange
-                            : Colors.white,
+                        color: audioSettings.showLyricsTranslation
+                            ? colors.accent
+                            : colors.textPrimary,
                         size: 24,
                       ),
                       onPressed: () {
-                        musicProvider.setShowLyricsTranslation(
-                          !musicProvider.showLyricsTranslation,
+                        audioSettings.setShowLyricsTranslation(
+                          !audioSettings.showLyricsTranslation,
                         );
-                        // 重新加载歌词以应用翻译设置
                         _currentSongId = null;
-                        _loadLyrics();
+                        unawaited(_loadLyrics());
                       },
                     ),
                   );
                 },
               ),
-              // Android 端额外显示"更多"按钮
               if (isAndroid)
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
+                    color: colors.textPrimary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.more_horiz, color: Colors.white, size: 24),
+                    icon: Icon(Icons.more_horiz, color: colors.textPrimary, size: 24),
                     onPressed: () => showPlayerMoreMenu(context),
                   ),
                 ),
@@ -399,9 +306,9 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     );
   }
 
-  /// 构建睡眠定时器指示器
-  Widget _buildSleepTimerIndicator(BuildContext context, MusicProvider musicProvider) {
-    if (!musicProvider.sleepTimer.isActive) {
+  Widget _buildSleepTimerIndicator(BuildContext context, MusicProvider musicProvider, ThemeColors colors) {
+    final sleepTimerProvider = Provider.of<SleepTimerProvider>(context);
+    if (!sleepTimerProvider.sleepTimer.isActive) {
       return const SizedBox.shrink();
     }
 
@@ -412,26 +319,25 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.15),
+            color: colors.warning.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.orange.withValues(alpha: 0.3),
-              width: 1,
+              color: colors.warning.withValues(alpha: 0.3),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.timer,
                 size: 18,
-                color: Colors.orange,
+                color: colors.warning,
               ),
               const SizedBox(width: 8),
               Text(
-                '定时关闭: ${musicProvider.sleepTimer.formattedRemainingTime}',
-                style: const TextStyle(
-                  color: Colors.orange,
+                '定时关闭: ${sleepTimerProvider.sleepTimer.formattedRemainingTime}',
+                style: TextStyle(
+                  color: colors.warning,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -440,7 +346,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               Icon(
                 Icons.chevron_right,
                 size: 16,
-                color: Colors.orange.withValues(alpha: 0.7),
+                color: colors.warning.withValues(alpha: 0.7),
               ),
             ],
           ),
@@ -449,17 +355,17 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildSongInfo(String title, String artist) {
+  Widget _buildSongInfo(String title, String artist, ThemeColors colors) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
       child: Column(
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w600,
-              color: Colors.white,
+              color: colors.textPrimary,
               letterSpacing: 0.3,
             ),
             textAlign: TextAlign.center,
@@ -467,7 +373,6 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 6),
-          // 点击歌手名字返回主页并搜索该歌手
           MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
@@ -479,7 +384,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.6),
+                  color: colors.textSecondary,
                   letterSpacing: 0.2,
                 ),
                 textAlign: TextAlign.center,
@@ -493,33 +398,32 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildLyricsPreview() {
-    return Consumer<MusicProvider>(
-      builder: (context, musicProvider, child) {
-        dynamic displayModel = lyricModel;
+  Widget _buildLyricsPreview(ThemeColors colors) {
+    return Consumer2<MusicProvider, AudioSettingsProvider>(
+      builder: (context, musicProvider, audioSettings, child) {
+        LyricsReaderModel? displayModel = lyricModel;
         if (_currentLyricsLrc != null && _currentLyricsLrc!.isNotEmpty) {
           try {
             final builder = LyricsModelBuilder.create().bindLyricToMain(_currentLyricsLrc!);
-            if (musicProvider.showLyricsTranslation &&
+            if (audioSettings.showLyricsTranslation &&
                 _currentLyricsTrans != null &&
                 _currentLyricsTrans!.isNotEmpty) {
               builder.bindLyricToExt(_currentLyricsTrans!);
             }
             displayModel = builder.getModel();
-          } catch (_) {
-            // keep default lyricModel
+          } catch (e) {
+            Logger.debug('歌词模型构建失败', 'PlayerScreen');
           }
         }
 
-        // 如果歌词模型为空或没有歌词行，显示空状态
-        if (displayModel.lyrics.isEmpty) {
+        if (displayModel == null || displayModel.lyrics.isEmpty) {
           return Container(
             height: 280,
             alignment: Alignment.center,
             child: Text(
               '暂无歌词',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.3),
+                color: colors.textSecondary.withValues(alpha: 0.3),
                 fontSize: 14,
               ),
             ),
@@ -540,7 +444,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               child: Text(
                 '暂无歌词',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: colors.textSecondary.withValues(alpha: 0.3),
                   fontSize: 14,
                 ),
               ),
@@ -549,7 +453,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
               return Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.play_arrow, color: Colors.white),
+                    icon: Icon(Icons.play_arrow, color: colors.textPrimary),
                     onPressed: () {
                       confirm.call();
                       musicProvider.seekTo(Duration(milliseconds: progress));
@@ -558,7 +462,7 @@ class _PlayerScreenState extends State<PlayerScreen> with SingleTickerProviderSt
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.3),
+                        color: colors.textSecondary.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       height: 2,

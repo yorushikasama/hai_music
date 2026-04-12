@@ -78,9 +78,8 @@
 }
 
 # 保持你的应用包名
--keep class com.example.hai_music.** { *; }
--keepclassmembers class com.example.hai_music.** { *; }
+-keep class com.hai.music.** { *; }
+-keepclassmembers class com.hai.music.** { *; }
 
-# 模型类不混淆（用于 JSON 序列化）
--keep class com.example.hai_music.models.** { *; }
--keepclassmembers class com.example.hai_music.models.** { *; }
+-keep class com.hai.music.models.** { *; }
+-keepclassmembers class com.hai.music.models.** { *; }

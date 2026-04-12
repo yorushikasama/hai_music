@@ -1,4 +1,4 @@
-package com.example.hai_music
+package com.hai.music
 
 import android.content.Context
 import com.ryanheise.audioservice.AudioServicePlugin

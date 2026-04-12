@@ -43,6 +43,7 @@ sealed class Result<T> {
 
 /// 成功结果
 class Success<T> extends Result<T> {
+  @override
   final T value;
 
   const Success(this.value);

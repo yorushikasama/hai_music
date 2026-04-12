@@ -141,8 +141,9 @@
 ```
 music/
 ├── audio/          # 音频文件
-│   ├── <songId>.mp3
-│   └── ...
+│   ├── <songId>.mp3   # MP3格式（标准/HQ/HQ+音质）
+│   ├── <songId>.flac  # FLAC格式（SQ无损/Hi-Res/臻品/臻品母带音质）
+│   └── <songId>.ec3   # EC3格式（杜比全景声音质）
 └── covers/         # 封面图片
     ├── <songId>.jpg
     └── ...

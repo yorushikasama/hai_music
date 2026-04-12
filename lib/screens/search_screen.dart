@@ -1,17 +1,20 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+
 import '../models/song.dart';
+import '../providers/favorite_provider.dart';
 import '../providers/music_provider.dart';
-import '../theme/app_styles.dart';
 import '../providers/theme_provider.dart';
+import '../services/download_manager.dart';
+import '../services/music_api_service.dart';
+import '../services/preferences_service.dart';
+import '../theme/app_styles.dart';
+import '../utils/logger.dart';
 import '../utils/platform_utils.dart';
 import '../widgets/draggable_window_area.dart';
-import '../services/music_api_service.dart';
-import '../services/preferences_cache_service.dart';
-import '../services/download_manager.dart';
 import 'download_progress_screen.dart';
 import 'search/search_header.dart';
 import 'search/search_results.dart';
@@ -41,14 +44,12 @@ class _SearchScreenState extends State<SearchScreen> {
   final Set<String> _selectedIds = {};
   
   static const int _debounceMilliseconds = 300; // 防抖延迟
-  static const String _historyKey = 'search_history';
-  static const int _maxHistoryCount = 10; // 最多保存10条历史
   static const int _pageSize = 30; // 每页数量
 
   @override
   void initState() {
     super.initState();
-    _loadSearchHistory();
+    unawaited(_loadSearchHistory());
     _scrollController.addListener(_onScroll);
     
     // 如果有初始搜索词，自动执行搜索
@@ -92,66 +93,48 @@ class _SearchScreenState extends State<SearchScreen> {
     // 距离底部200px时触发加载
     if (currentScroll >= maxScroll - 200) {
       if (!_isLoadingMore && _hasMore && _currentQuery.isNotEmpty) {
-        _loadMore();
+        unawaited(_loadMore());
       }
     }
   }
   
-  /// 加载搜索历史
   Future<void> _loadSearchHistory() async {
     try {
-      final prefsCache = PreferencesCacheService();
-      await prefsCache.init();
-      final history = await prefsCache.getStringList(_historyKey) ?? [];
+      final prefs = PreferencesService();
+      final history = prefs.getSearchHistory();
       if (mounted) {
         setState(() {
           _searchHistory = history;
         });
       }
     } catch (e) {
-      // 忽略错误
+      Logger.error('加载搜索历史失败', e, null, 'SearchScreen');
     }
   }
-  
-  /// 保存搜索历史
+
   Future<void> _saveSearchHistory(String query) async {
     if (query.trim().isEmpty) return;
 
     try {
-      final prefsCache = PreferencesCacheService();
-      await prefsCache.init();
-
-      // 移除重复项
-      _searchHistory.remove(query);
-      // 添加到开头
-      _searchHistory.insert(0, query);
-      // 限制数量
-      if (_searchHistory.length > _maxHistoryCount) {
-        _searchHistory = _searchHistory.sublist(0, _maxHistoryCount);
-      }
-
-      await prefsCache.setStringList(_historyKey, _searchHistory);
-      if (mounted) {
-        setState(() {});
-      }
+      final prefs = PreferencesService();
+      await prefs.addSearchHistory(query);
+      await _loadSearchHistory();
     } catch (e) {
-      // 忽略错误
+      Logger.error('保存搜索历史失败', e, null, 'SearchScreen');
     }
   }
-  
-  /// 清空搜索历史
+
   Future<void> _clearSearchHistory() async {
     try {
-      final prefsCache = PreferencesCacheService();
-      await prefsCache.init();
-      await prefsCache.remove(_historyKey);
+      final prefs = PreferencesService();
+      await prefs.clearSearchHistory();
       if (mounted) {
         setState(() {
           _searchHistory = [];
         });
       }
     } catch (e) {
-      // 忽略错误
+      Logger.error('清空搜索历史失败', e, null, 'SearchScreen');
     }
   }
 
@@ -172,13 +155,13 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     
     // 设置新的定时器
-    _debounceTimer = Timer(Duration(milliseconds: _debounceMilliseconds), () {
+    _debounceTimer = Timer(const Duration(milliseconds: _debounceMilliseconds), () {
       _performSearch(query);
     });
   }
   
   /// 执行搜索（第一页）
-  void _performSearch(String query) async {
+  Future<void> _performSearch(String query) async {
     if (query.trim().isEmpty) return;
     
     Logger.debug('🔎 执行搜索: $query');
@@ -194,8 +177,6 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final results = await _apiService.searchSongs(
         keyword: _currentQuery,
-        limit: _pageSize,
-        page: 1,
       );
 
       if (mounted) {
@@ -258,7 +239,6 @@ class _SearchScreenState extends State<SearchScreen> {
       final nextPage = _currentPage + 1;
       final results = await _apiService.searchSongs(
         keyword: _currentQuery,
-        limit: _pageSize,
         page: nextPage,
       );
       
@@ -411,7 +391,7 @@ class _SearchScreenState extends State<SearchScreen> {
             .playSong(song, playlist: _searchResults);
       },
       onLoadMore: _loadMore,
-      onMenuAction: (ctx, action, song) => _handleMenuAction(ctx, action, song),
+      onMenuAction: _handleMenuAction,
     );
   }
 
@@ -526,17 +506,18 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 处理菜单操作
   Future<void> _handleMenuAction(BuildContext context, String action, Song song) async {
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     
     switch (action) {
       case 'favorite':
-        await musicProvider.toggleFavorite(song.id);
+        await favoriteProvider.toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
         if (!mounted) return;
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              musicProvider.isFavorite(song.id)
+              favoriteProvider.isFavorite(song.id)
                   ? '已添加到我喜欢'
                   : '已从我喜欢中移除',
             ),
@@ -563,7 +544,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 label: '查看',
                 onPressed: () {
                   navigator.push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (context) => const DownloadProgressScreen(),
                     ),
                   );
@@ -583,12 +564,11 @@ class _SearchScreenState extends State<SearchScreen> {
         break;
         
       case 'play':
-        musicProvider.playSong(song, playlist: _searchResults);
+        unawaited(musicProvider.playSong(song, playlist: _searchResults));
         break;
     }
   }
 
-  /// 批量添加到喜欢
   Future<void> _batchAddToFavorites() async {
     final selectedSongs = _searchResults
         .where((s) => _selectedIds.contains(s.id))
@@ -597,15 +577,12 @@ class _SearchScreenState extends State<SearchScreen> {
     if (selectedSongs.isEmpty) return;
 
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
-    int successCount = 0;
-
-    for (final song in selectedSongs) {
-      final isFavorite = musicProvider.isFavorite(song.id);
-      if (!isFavorite) {
-        final success = await musicProvider.toggleFavorite(song.id);
-        if (success) successCount++;
-      }
-    }
+    final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
+    final futures = selectedSongs
+        .where((song) => !favoriteProvider.isFavorite(song.id))
+        .map((song) => favoriteProvider.toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist));
+    final results = await Future.wait(futures);
+    final successCount = results.where((r) => r).length;
 
     if (!mounted) return;
 
@@ -623,7 +600,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// 批量下载
   Future<void> _batchDownload() async {
     final selectedSongs = _searchResults
         .where((s) => _selectedIds.contains(s.id))
@@ -634,11 +610,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final manager = DownloadManager();
     await manager.init();
 
-    int successCount = 0;
-    for (final song in selectedSongs) {
-      final success = await manager.addDownload(song);
-      if (success) successCount++;
-    }
+    final futures = selectedSongs.map(manager.addDownload);
+    final results = await Future.wait(futures);
+    final successCount = results.where((r) => r).length;
 
     if (!mounted) return;
 
@@ -657,7 +631,7 @@ class _SearchScreenState extends State<SearchScreen> {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
+              MaterialPageRoute<void>(
                 builder: (context) => const DownloadProgressScreen(),
               ),
             );

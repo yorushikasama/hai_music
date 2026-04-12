@@ -1,18 +1,14 @@
-/// 存储配置模型
+const Object _sentinel = Object();
+
 class StorageConfig {
-  // Supabase 配置
   final String supabaseUrl;
   final String supabaseAnonKey;
-  
-  // Cloudflare R2 配置
   final String r2Endpoint;
   final String r2AccessKey;
   final String r2SecretKey;
   final String r2BucketName;
   final String r2Region;
-  final String? r2CustomDomain; // R2 自定义域名（如：music.ysnight.cn）
-  
-  // 是否启用云端同步
+  final String? r2CustomDomain;
   final bool enableSync;
 
   StorageConfig({
@@ -29,15 +25,15 @@ class StorageConfig {
 
   factory StorageConfig.fromJson(Map<String, dynamic> json) {
     return StorageConfig(
-      supabaseUrl: json['supabaseUrl'] ?? '',
-      supabaseAnonKey: json['supabaseAnonKey'] ?? '',
-      r2Endpoint: json['r2Endpoint'] ?? '',
-      r2AccessKey: json['r2AccessKey'] ?? '',
-      r2SecretKey: json['r2SecretKey'] ?? '',
-      r2BucketName: json['r2BucketName'] ?? '',
-      r2Region: json['r2Region'] ?? 'auto',
-      r2CustomDomain: json['r2CustomDomain'],
-      enableSync: json['enableSync'] ?? false,
+      supabaseUrl: (json['supabaseUrl'] ?? '') as String,
+      supabaseAnonKey: (json['supabaseAnonKey'] ?? '') as String,
+      r2Endpoint: (json['r2Endpoint'] ?? '') as String,
+      r2AccessKey: (json['r2AccessKey'] ?? '') as String,
+      r2SecretKey: (json['r2SecretKey'] ?? '') as String,
+      r2BucketName: (json['r2BucketName'] ?? '') as String,
+      r2Region: (json['r2Region'] ?? 'auto') as String,
+      r2CustomDomain: json['r2CustomDomain'] as String?,
+      enableSync: (json['enableSync'] ?? false) as bool,
     );
   }
 
@@ -55,7 +51,6 @@ class StorageConfig {
     };
   }
 
-  /// 检查配置是否完整
   bool get isValid {
     return supabaseUrl.isNotEmpty &&
         supabaseAnonKey.isNotEmpty &&
@@ -65,7 +60,6 @@ class StorageConfig {
         r2BucketName.isNotEmpty;
   }
 
-  /// 创建空配置
   factory StorageConfig.empty() {
     return StorageConfig(
       supabaseUrl: '',
@@ -74,8 +68,6 @@ class StorageConfig {
       r2AccessKey: '',
       r2SecretKey: '',
       r2BucketName: '',
-      r2CustomDomain: null,
-      enableSync: false,
     );
   }
 
@@ -87,7 +79,7 @@ class StorageConfig {
     String? r2SecretKey,
     String? r2BucketName,
     String? r2Region,
-    String? r2CustomDomain,
+    Object? r2CustomDomain = _sentinel,
     bool? enableSync,
   }) {
     return StorageConfig(
@@ -98,7 +90,9 @@ class StorageConfig {
       r2SecretKey: r2SecretKey ?? this.r2SecretKey,
       r2BucketName: r2BucketName ?? this.r2BucketName,
       r2Region: r2Region ?? this.r2Region,
-      r2CustomDomain: r2CustomDomain ?? this.r2CustomDomain,
+      r2CustomDomain: r2CustomDomain == _sentinel
+          ? this.r2CustomDomain
+          : r2CustomDomain as String?,
       enableSync: enableSync ?? this.enableSync,
     );
   }

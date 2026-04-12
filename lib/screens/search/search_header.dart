@@ -20,19 +20,7 @@ class SearchHeader extends StatelessWidget {
   final VoidCallback onBatchDownload;
 
   const SearchHeader({
-    super.key,
-    required this.isSelectionMode,
-    required this.selectedCount,
-    required this.totalCount,
-    required this.hasSearchResults,
-    required this.searchController,
-    required this.onSearchChanged,
-    required this.onSearchSubmitted,
-    required this.onEnterSelectionMode,
-    required this.onCancelSelectionMode,
-    required this.onToggleSelectAll,
-    required this.onBatchAddFavorites,
-    required this.onBatchDownload,
+    required this.isSelectionMode, required this.selectedCount, required this.totalCount, required this.hasSearchResults, required this.searchController, required this.onSearchChanged, required this.onSearchSubmitted, required this.onEnterSelectionMode, required this.onCancelSelectionMode, required this.onToggleSelectAll, required this.onBatchAddFavorites, required this.onBatchDownload, super.key,
   });
 
   @override

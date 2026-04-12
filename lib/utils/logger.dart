@@ -68,14 +68,6 @@ class Logger {
     }
   }
 
-  /// 播放器日志
-  static void player(String message, [String? tag]) {
-    if (enableDebugLog) {
-      final prefix = tag != null ? '[$tag] ' : '';
-      debugPrint('🎵 $prefix$message');
-    }
-  }
-
   /// 下载日志
   static void download(String message, [String? tag]) {
     if (enableDebugLog) {

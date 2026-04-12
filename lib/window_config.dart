@@ -1,14 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 
-void configureWindow() async {
+Future<void> configureWindow() async {
   await Window.initialize();
   
   // 设置窗口透明效果
   await Window.setEffect(
     effect: WindowEffect.transparent,
-    color: const Color(0x00000000),
   );
   
   doWhenWindowReady(() {

@@ -1,187 +1,225 @@
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_constants.dart';
+import '../models/audio_quality.dart';
+import '../utils/logger.dart';
 
-/// SharedPreferences 服务类
-/// 用于保存和读取用户设置、播放历史等
 class PreferencesService {
   static final PreferencesService _instance = PreferencesService._internal();
-  late SharedPreferences _prefs;
-  bool _initialized = false;
+  SharedPreferences? _prefs;
+  Completer<void>? _initCompleter;
 
   factory PreferencesService() => _instance;
 
   PreferencesService._internal();
 
-  /// 初始化 SharedPreferences
   Future<void> init() async {
-    if (!_initialized) {
+    if (_prefs != null) return;
+    if (_initCompleter != null) {
+      await _initCompleter!.future;
+      return;
+    }
+    _initCompleter = Completer<void>();
+    try {
       _prefs = await SharedPreferences.getInstance();
-      _initialized = true;
+      _initCompleter!.complete();
+      Logger.info('PreferencesService 初始化完成', 'PreferencesService');
+    } catch (e) {
+      _initCompleter!.completeError(e);
+      _initCompleter = null;
+      rethrow;
     }
   }
 
-  // ==================== 音量设置 ====================
-  
-  /// 保存音量
-  Future<bool> setVolume(double volume) async {
-    return await _prefs.setDouble('volume', volume);
+  Future<bool> emergencyClear() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final result = await prefs.clear();
+      _prefs = prefs;
+      Logger.warning('已执行 SharedPreferences 紧急清除', 'PreferencesService');
+      return result;
+    } catch (e) {
+      Logger.error('SharedPreferences 紧急清除失败', e, null, 'PreferencesService');
+      return false;
+    }
   }
 
-  /// 获取音量
+  Future<void> _ensureInitialized() async {
+    if (_prefs != null) return;
+    await init();
+  }
+
+  SharedPreferences get _safePrefs {
+    if (_prefs == null) {
+      throw StateError('PreferencesService 未初始化，请先调用 init()');
+    }
+    return _prefs!;
+  }
+
+  bool get isInitialized => _prefs != null;
+
+  Future<String?> getString(String key) async {
+    await _ensureInitialized();
+    return _prefs!.getString(key);
+  }
+
+  Future<bool> setString(String key, String value) async {
+    await _ensureInitialized();
+    return _prefs!.setString(key, value);
+  }
+
+  Future<int?> getInt(String key) async {
+    await _ensureInitialized();
+    return _prefs!.getInt(key);
+  }
+
+  Future<bool> setInt(String key, int value) async {
+    await _ensureInitialized();
+    return _prefs!.setInt(key, value);
+  }
+
+  Future<List<String>?> getStringList(String key) async {
+    await _ensureInitialized();
+    return _prefs!.getStringList(key);
+  }
+
+  Future<bool> setStringList(String key, List<String> value) async {
+    await _ensureInitialized();
+    return _prefs!.setStringList(key, value);
+  }
+
+  Future<bool> remove(String key) async {
+    await _ensureInitialized();
+    return _prefs!.remove(key);
+  }
+
+  Future<bool> containsKey(String key) async {
+    await _ensureInitialized();
+    return _prefs!.containsKey(key);
+  }
+
+  Future<bool> clear() async {
+    await _ensureInitialized();
+    return _prefs!.clear();
+  }
+
+  Future<Set<String>> getKeys() async {
+    await _ensureInitialized();
+    return _prefs!.getKeys();
+  }
+
+  Future<void> reload() async {
+    await _ensureInitialized();
+    await _prefs!.reload();
+  }
+
+  Future<bool> setVolume(double volume) {
+    return _safePrefs.setDouble('volume', volume);
+  }
+
   double getVolume() {
-    return _prefs.getDouble('volume') ?? 1.0;
+    if (_prefs == null) return 1.0;
+    return _prefs!.getDouble('volume') ?? 1.0;
   }
 
-  // ==================== 播放模式 ====================
-  
-  /// 保存播放模式
-  Future<bool> setPlayMode(String mode) async {
-    return await _prefs.setString('play_mode', mode);
+  Future<bool> setPlayMode(String mode) {
+    return _safePrefs.setString('play_mode', mode);
   }
 
-  /// 获取播放模式
   String getPlayMode() {
-    return _prefs.getString('play_mode') ?? 'sequence';
+    if (_prefs == null) return 'sequence';
+    return _prefs!.getString('play_mode') ?? 'sequence';
   }
 
-  // ==================== 音质设置 ====================
-  
-  /// 保存音质
-  Future<bool> setAudioQuality(String quality) async {
-    return await _prefs.setString('audio_quality', quality);
+  Future<bool> setAudioQuality(AudioQuality quality) {
+    return _safePrefs.setString('audio_quality', quality.name);
   }
 
-  /// 获取音质
-  String getAudioQuality() {
-    return _prefs.getString('audio_quality') ?? 'high';
+  AudioQuality getAudioQuality() {
+    if (_prefs == null) return AudioQuality.high;
+    final stored = _prefs!.getString('audio_quality');
+    if (stored == null) return AudioQuality.high;
+    return AudioQuality.parse(stored);
   }
 
-  // ==================== 主题设置 ====================
-  
-  /// 保存主题模式
-  Future<bool> setThemeMode(String mode) async {
-    return await _prefs.setString('theme_mode', mode);
-  }
-
-  /// 获取主题模式
-  String getThemeMode() {
-    return _prefs.getString('theme_mode') ?? 'system';
-  }
-
-  // ==================== 歌词设置 ====================
-
-  Future<bool> setShowLyricsTranslation(bool value) async {
-    return await _prefs.setBool('show_lyrics_translation', value);
+  Future<bool> setShowLyricsTranslation(bool value) {
+    return _safePrefs.setBool('show_lyrics_translation', value);
   }
 
   bool getShowLyricsTranslation() {
-    return _prefs.getBool('show_lyrics_translation') ?? true;
+    if (_prefs == null) return true;
+    return _prefs!.getBool('show_lyrics_translation') ?? true;
   }
 
-  // ==================== 搜索历史 ====================
-  
-  /// 保存搜索历史
+  Future<bool> setPlaybackSpeed(double speed) {
+    return _safePrefs.setDouble('playback_speed', speed);
+  }
+
+  double getPlaybackSpeed() {
+    if (_prefs == null) return 1.0;
+    return _prefs!.getDouble('playback_speed') ?? 1.0;
+  }
+
   Future<bool> addSearchHistory(String keyword) async {
-    List<String> history = getSearchHistory();
-    // 如果已存在，先移除
+    final List<String> history = getSearchHistory();
     history.remove(keyword);
-    // 添加到最前面
     history.insert(0, keyword);
-    // 最多保存指定条数
     if (history.length > AppConstants.maxSearchHistory) {
-      history = history.sublist(0, AppConstants.maxSearchHistory);
+      history.removeRange(AppConstants.maxSearchHistory, history.length);
     }
-    return await _prefs.setStringList('search_history', history);
+    return _safePrefs.setStringList('search_history', history);
   }
 
-  /// 获取搜索历史
   List<String> getSearchHistory() {
-    return _prefs.getStringList('search_history') ?? [];
+    if (_prefs == null) return [];
+    return _prefs!.getStringList('search_history') ?? [];
   }
 
-  /// 清除搜索历史
-  Future<bool> clearSearchHistory() async {
-    return await _prefs.remove('search_history');
+  Future<bool> clearSearchHistory() {
+    return _safePrefs.remove('search_history');
   }
 
-  // ==================== 播放历史 ====================
-  
-  /// 保存最近播放的歌曲ID列表
-  Future<bool> addPlayHistory(String songId) async {
-    List<String> history = getPlayHistory();
-    history.remove(songId);
-    history.insert(0, songId);
-    if (history.length > AppConstants.maxPlayHistory) {
-      history = history.sublist(0, AppConstants.maxPlayHistory);
-    }
-    return await _prefs.setStringList('play_history', history);
-  }
-
-  /// 获取播放历史
-  List<String> getPlayHistory() {
-    return _prefs.getStringList('play_history') ?? [];
-  }
-
-  // ==================== 收藏歌曲 ====================
-  
-  /// 添加收藏
   Future<bool> addFavorite(String songId) async {
-    List<String> favorites = getFavorites();
+    final List<String> favorites = getFavorites();
     if (!favorites.contains(songId)) {
       favorites.add(songId);
-      return await _prefs.setStringList('favorites', favorites);
+      return _safePrefs.setStringList('favorites', favorites);
     }
-    return true;
+    return Future.value(true);
   }
 
-  /// 移除收藏
   Future<bool> removeFavorite(String songId) async {
-    List<String> favorites = getFavorites();
+    final List<String> favorites = getFavorites();
     favorites.remove(songId);
-    return await _prefs.setStringList('favorites', favorites);
+    return _safePrefs.setStringList('favorites', favorites);
   }
 
-  /// 获取收藏列表
   List<String> getFavorites() {
-    return _prefs.getStringList('favorites') ?? [];
+    if (_prefs == null) return [];
+    return _prefs!.getStringList('favorites') ?? [];
   }
 
-  /// 检查是否已收藏
   bool isFavorite(String songId) {
     return getFavorites().contains(songId);
   }
 
-  /// 批量设置收藏列表
-  Future<bool> setFavoriteSongs(List<String> songIds) async {
-    return await _prefs.setStringList('favorites', songIds);
+  Future<bool> setFavoriteSongs(List<String> songIds) {
+    return _safePrefs.setStringList('favorites', songIds);
   }
 
-  /// 获取收藏歌曲列表（别名方法）
   List<String> getFavoriteSongs() {
     return getFavorites();
   }
 
-  // ==================== 上次播放会话 ====================
-  
-  /// 保存上次播放会话（JSON 字符串）
-  Future<bool> setLastSession(String sessionJson) async {
-    return await _prefs.setString('last_session', sessionJson);
+  Future<bool> setLastSession(String sessionJson) {
+    return _safePrefs.setString('last_session', sessionJson);
   }
 
-  /// 获取上次播放会话（JSON 字符串）
   String getLastSession() {
-    return _prefs.getString('last_session') ?? '';
+    return _safePrefs.getString('last_session') ?? '';
   }
 
-  /// 清除上次播放会话
-  Future<bool> clearLastSession() async {
-    return await _prefs.remove('last_session');
-  }
-
-  // ==================== 清除所有数据 ====================
-  
-  /// 清除所有数据
-  Future<bool> clearAll() async {
-    return await _prefs.clear();
+  Future<bool> clearLastSession() {
+    return _safePrefs.remove('last_session');
   }
 }

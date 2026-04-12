@@ -2,7 +2,7 @@ import 'dart:async';
 import '../models/song.dart';
 
 /// 统一的音频播放器接口
-/// 支持桌面端（audioplayers）和移动端（just_audio）
+/// 支持桌面端（media_kit）和移动端（just_audio）
 abstract class AudioPlayerInterface {
   /// 播放状态流
   Stream<bool> get playingStream;

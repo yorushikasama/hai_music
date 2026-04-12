@@ -6,7 +6,7 @@
     "background_color": "#0F0F0F",
     "theme_color": "#6366F1",
     "description": "A cross-platform music player application",
-    "orientation": "portrait-primary",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

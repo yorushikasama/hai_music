@@ -4,10 +4,10 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
-  audioplayers_windows
   bitsdojo_window_windows
   flutter_acrylic
-  just_audio_windows
+  flutter_secure_storage_windows
+  media_kit_libs_windows_audio
   url_launcher_windows
 )
 

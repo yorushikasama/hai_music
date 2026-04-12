@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
+import 'package:flutter/material.dart';
+
+import '../utils/logger.dart';
 import '../utils/platform_utils.dart';
 
 /// 可拖动窗口区域组件
@@ -19,8 +21,7 @@ class DraggableWindowArea extends StatelessWidget {
   final Color? color;
 
   const DraggableWindowArea({
-    super.key,
-    required this.child,
+    required this.child, super.key,
     this.height,
     this.width,
     this.color,
@@ -40,7 +41,7 @@ class DraggableWindowArea extends StatelessWidget {
         try {
           appWindow.startDragging();
         } catch (e) {
-          // 忽略错误 (Web 平台或其他不支持的情况)
+          Logger.debug('窗口拖动不支持: $e', 'DraggableWindowArea');
         }
       },
       child: Container(

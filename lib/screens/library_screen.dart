@@ -1,24 +1,26 @@
-import 'package:flutter/material.dart';
-import '../utils/logger.dart';
-import '../utils/format_utils.dart';
-import 'package:provider/provider.dart';
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../models/playlist.dart';
 import '../models/song.dart';
-import '../theme/app_styles.dart';
 import '../providers/theme_provider.dart';
-import '../utils/responsive.dart';
-import '../services/music_api_service.dart';
 import '../services/cache_manager_service.dart';
-import '../services/preferences_cache_service.dart';
 import '../services/data_cache_service.dart';
-import 'playlist_detail_screen.dart';
-import 'storage_config_screen.dart';
-import 'favorites_screen.dart';
-import 'recent_play_screen.dart';
-import 'downloaded_songs_screen.dart';
+import '../services/music_api_service.dart';
+import '../services/preferences_service.dart';
+import '../theme/app_styles.dart';
+import '../utils/format_utils.dart';
+import '../utils/logger.dart';
+import '../utils/responsive.dart';
 import 'download_progress_screen.dart';
+import 'downloaded_songs_screen.dart';
+import 'favorites_screen.dart';
 import 'library/library_header.dart';
+import 'playlist_detail_screen.dart';
+import 'recent_play_screen.dart';
+import 'storage_config_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -44,18 +46,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _initCache() async {
     await _cacheService.init();
-    _loadQQNumber();
+    unawaited(_loadQQNumber());
   }
 
   Future<void> _loadQQNumber() async {
-    final prefsCache = PreferencesCacheService();
-    await prefsCache.init();
-    final savedQQ = await prefsCache.getString(_qqNumberKey);
+    final prefs = PreferencesService();
+    final savedQQ = await prefs.getString(_qqNumberKey);
     if (savedQQ != null && savedQQ.isNotEmpty) {
       setState(() {
         _qqNumber = savedQQ;
       });
-      _loadUserPlaylists();
+      unawaited(_loadUserPlaylists());
     } else {
       // 首次使用，提示用户输入 QQ 号
       setState(() => _isLoading = false);
@@ -66,9 +67,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _saveQQNumber(String qqNumber) async {
-    final prefsCache = PreferencesCacheService();
-    await prefsCache.init();
-    await prefsCache.setString(_qqNumberKey, qqNumber);
+    final prefs = PreferencesService();
+    await prefs.setString(_qqNumberKey, qqNumber);
   }
 
   Future<void> _loadUserPlaylists({bool forceRefresh = false}) async {
@@ -129,7 +129,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               onOpenDownloadProgress: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  MaterialPageRoute<void>(
                     builder: (context) => const DownloadProgressScreen(),
                   ),
                 );
@@ -137,12 +137,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
               onOpenStorageConfig: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  MaterialPageRoute<void>(
                     builder: (context) => const StorageConfigScreen(),
                   ),
                 );
               },
-              onClearCache: () => _showClearCacheDialog(context),
+              onClearCache: _showClearCacheDialog,
             ),
             SliverToBoxAdapter(
               child: Padding(
@@ -320,7 +320,7 @@ if (_isLoading)
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                MaterialPageRoute<void>(
                   builder: (context) => const FavoritesScreen(),
                 ),
               );
@@ -337,7 +337,7 @@ if (_isLoading)
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                MaterialPageRoute<void>(
                   builder: (context) => const RecentPlayScreen(),
                 ),
               );
@@ -354,7 +354,7 @@ if (_isLoading)
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                MaterialPageRoute<void>(
                   builder: (context) => const DownloadedSongsScreen(),
                 ),
               );
@@ -384,7 +384,6 @@ if (_isLoading)
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
           border: Border.all(
             color: color.withValues(alpha: 0.3),
-            width: 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -441,13 +440,13 @@ if (_isLoading)
     return GestureDetector(
       onTap: () async {
         // 显示加载对话框
-        showDialog(
+        unawaited(showDialog<void>(
           context: context,
           barrierDismissible: false,
           builder: (context) => Center(
             child: CircularProgressIndicator(color: colors.accent),
           ),
-        );
+        ));
 
         // 在异步操作前提取 context 相关对象
         final navigator = Navigator.of(context);
@@ -460,9 +459,7 @@ if (_isLoading)
           
           // 直接获取歌单歌曲（第一页）
           final result = await _apiService.getPlaylistSongs(
-            playlistId: playlistData['id'],
-            page: 1,
-            num: 60,
+            playlistId: playlistData['id'] as String,
             uin: _qqNumber,
           );
           
@@ -481,22 +478,22 @@ if (_isLoading)
 
           // 创建 Playlist 对象
           final playlist = Playlist(
-            id: playlistData['id'],
-            name: playlistData['name'],
-            coverUrl: playlistData['coverUrl'],
+            id: playlistData['id'] as String,
+            name: playlistData['name'] as String,
+            coverUrl: playlistData['coverUrl'] as String,
             songs: songs,
           );
 
           // 跳转到歌单详情页
-          navigator.push(
-            MaterialPageRoute(
+          unawaited(navigator.push(
+            MaterialPageRoute<void>(
               builder: (context) => PlaylistDetailScreen(
                 playlist: playlist,
                 totalCount: totalCount,
                 qqNumber: _qqNumber,
               ),
             ),
-          );
+          ));
         } catch (e) {
           Logger.error('❌ 我的歌单加载失败: ${playlistData['name']} (ID: ${playlistData['id']})', e, null, 'LibraryScreen');
           
@@ -521,7 +518,6 @@ if (_isLoading)
             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
             border: Border.all(
               color: colors.border.withValues(alpha: 0.5),
-              width: 1,
             ),
             boxShadow: [
               BoxShadow(
@@ -548,9 +544,9 @@ if (_isLoading)
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      playlistData['coverUrl'].isNotEmpty
+                      (playlistData['coverUrl'] as String).isNotEmpty
                           ? CachedNetworkImage(
-                              imageUrl: playlistData['coverUrl'],
+                              imageUrl: playlistData['coverUrl'] as String,
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
                                 color: colors.card.withValues(alpha: 0.5),
@@ -616,7 +612,7 @@ if (_isLoading)
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      playlistData['name'],
+                      playlistData['name'] as String,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -626,10 +622,10 @@ if (_isLoading)
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (playlistData['description'].isNotEmpty) ...[
+                    if ((playlistData['description'] as String?) != null && (playlistData['description'] as String).isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        playlistData['description'],
+                        playlistData['description'] as String,
                         style: TextStyle(
                           fontSize: 12,
                           color: colors.textSecondary,
@@ -653,7 +649,8 @@ if (_isLoading)
     final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
     final controller = TextEditingController(text: _qqNumber);
     
-    showDialog(
+    if (!mounted) return;
+    unawaited(showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: colors.card,
@@ -716,7 +713,7 @@ if (_isLoading)
 
               await _saveQQNumber(newQQ);
               // 切换 QQ 号后强制刷新
-              _loadUserPlaylists(forceRefresh: true);
+              unawaited(_loadUserPlaylists(forceRefresh: true));
 
               if (!mounted) return;
               messenger.showSnackBar(
@@ -731,22 +728,22 @@ if (_isLoading)
           ),
         ],
       ),
-    );
+    ));
   }
 
-  void _showClearCacheDialog(BuildContext context) async {
+  Future<void> _showClearCacheDialog() async {
     final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
     final cacheManager = CacheManagerService(); // 使用单例
     final navigator = Navigator.of(context);
 
     // 显示加载对话框
-    showDialog(
+    unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => Center(
         child: CircularProgressIndicator(color: colors.accent),
       ),
-    );
+    ));
 
     // 获取缓存信息
     final cacheInfo = await cacheManager.getCacheInfo();
@@ -761,14 +758,14 @@ if (_isLoading)
     final audioSizeStr = FormatUtils.formatSize(cacheInfo.audioSize);
     final coverSizeStr = FormatUtils.formatSize(cacheInfo.coverSize);
 
-    showDialog(
+    unawaited(showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
           children: [
             Icon(Icons.cleaning_services, color: colors.accent),
-            SizedBox(width: 12),
-            Text('清理缓存'),
+            const SizedBox(width: 12),
+            const Text('清理缓存'),
           ],
         ),
         content: Column(
@@ -783,21 +780,21 @@ if (_isLoading)
                 color: colors.textPrimary,
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             _buildCacheItem(
               icon: Icons.music_note,
               label: '音频缓存',
               size: audioSizeStr,
               colors: colors,
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             _buildCacheItem(
               icon: Icons.image,
               label: '封面缓存',
               size: coverSizeStr,
               colors: colors,
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             _buildCacheItem(
               icon: Icons.photo_library,
               label: '图片缓存',
@@ -805,7 +802,7 @@ if (_isLoading)
               colors: colors,
             ),
             if (cacheInfo.downloadSize > 0) ...[
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               _buildCacheItem(
                 icon: Icons.download,
                 label: '下载文件',
@@ -813,7 +810,7 @@ if (_isLoading)
                 colors: colors,
               ),
             ],
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               '清理缓存将删除音频、封面和图片缓存\n（不包括下载的歌曲）',
               style: TextStyle(
@@ -827,7 +824,7 @@ if (_isLoading)
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('取消'),
+            child: const Text('取消'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -837,13 +834,13 @@ if (_isLoading)
               navigator.pop();
 
               // 显示加载对话框
-              showDialog(
+              unawaited(showDialog<void>(
                 context: context,
                 barrierDismissible: false,
                 builder: (context) => Center(
                   child: CircularProgressIndicator(color: colors.accent),
                 ),
-              );
+              ));
 
               // 清理缓存
               final success = await cacheManager.clearAllCache();
@@ -866,23 +863,23 @@ if (_isLoading)
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: Text('清理'),
+            child: const Text('清理'),
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildCacheItem({
     required IconData icon,
     required String label,
     required String size,
-    required dynamic colors,
+    required ThemeColors colors,
   }) {
     return Row(
       children: [
         Icon(icon, size: 16, color: colors.textSecondary),
-        SizedBox(width: 8),
+        const SizedBox(width: 8),
         Text(
           label,
           style: TextStyle(
@@ -890,7 +887,7 @@ if (_isLoading)
             color: colors.textSecondary,
           ),
         ),
-        Spacer(),
+        const Spacer(),
         Text(
           size,
           style: TextStyle(

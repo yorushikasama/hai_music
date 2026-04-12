@@ -1,19 +1,21 @@
+import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
 import 'package:flutter/material.dart';
-import '../utils/logger.dart';
 import 'package:provider/provider.dart';
+
+import '../providers/favorite_provider.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/keyboard_shortcut_service.dart';
+import '../theme/app_styles.dart';
+import '../utils/logger.dart';
+import '../utils/platform_utils.dart';
+import '../utils/responsive.dart';
+import '../widgets/draggable_window_area.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/theme_selector.dart';
-import '../widgets/draggable_window_area.dart';
-import '../utils/responsive.dart';
-import '../utils/platform_utils.dart';
-import '../theme/app_styles.dart';
-import '../services/keyboard_shortcut_service.dart';
 import 'discover_screen.dart';
-import 'search_screen.dart';
 import 'library_screen.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
+import 'search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,23 +26,28 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  String? _searchQuery; // 用于传递给搜索页的关键词
-  Key _searchScreenKey = UniqueKey(); // 用于强制重建 SearchScreen
+  String? _searchQuery;
+  Key _searchScreenKey = UniqueKey();
 
-  // 动态生成页面列表，以便传递搜索关键词
-  List<Widget> get _screens => [
-    const DiscoverScreen(),
-    SearchScreen(key: _searchScreenKey, initialQuery: _searchQuery),
-    const LibraryScreen(),
-  ];
-  
-  // 切换到搜索页并执行搜索
+  late final List<Widget> _cachedScreens;
+
+  @override
+  void initState() {
+    super.initState();
+    _cachedScreens = [
+      const DiscoverScreen(),
+      SearchScreen(key: _searchScreenKey, initialQuery: _searchQuery),
+      const LibraryScreen(),
+    ];
+  }
+
   void _navigateToSearch(String query) {
-    Logger.debug('🔍 导航到搜索页，关键词: $query');
+    Logger.debug('导航到搜索页，关键词: $query', 'HomeScreen');
     setState(() {
       _searchQuery = query;
-      _searchScreenKey = UniqueKey(); // 生成新的 key 强制重建
-      _selectedIndex = 1; // 切换到搜索页
+      _searchScreenKey = UniqueKey();
+      _cachedScreens[1] = SearchScreen(key: _searchScreenKey, initialQuery: _searchQuery);
+      _selectedIndex = 1;
     });
   }
 
@@ -66,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: colors.surface.withValues(alpha: 0.75),
                     boxShadow: AppStyles.getShadows(colors.isLight),
                     border: Border(
-                      top: BorderSide(color: colors.border, width: 1),
+                      top: BorderSide(color: colors.border),
                     ),
                   ),
                   child: SafeArea(
@@ -132,7 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           border: Border(
                             right: BorderSide(
                               color: colors.border,
-                              width: 1,
                             ),
                           ),
                         ),
@@ -141,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         DraggableWindowArea(
                           child: _buildTitleBar(colors),
                         ),
-                        SizedBox(height: AppStyles.spacingL),
+                        const SizedBox(height: AppStyles.spacingL),
                         _buildSidebarItem(
                           icon: Icons.explore_outlined,
                           selectedIcon: Icons.explore,
@@ -166,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Spacer(),
                         // 主题切换按钮
                         Padding(
-                          padding: EdgeInsets.fromLTRB(
+                          padding: const EdgeInsets.fromLTRB(
                             AppStyles.spacingXL,
                             AppStyles.spacingS,
                             AppStyles.spacingXL,
@@ -176,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: Colors.transparent,
                             child: InkWell(
                               onTap: () {
-                                showModalBottomSheet(
+                                showModalBottomSheet<void>(
                                   context: context,
                                   backgroundColor: Colors.transparent,
                                   builder: (context) => const ThemeSelector(),
@@ -184,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               },
                               borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
                               child: Container(
-                                padding: EdgeInsets.symmetric(
+                                padding: const EdgeInsets.symmetric(
                                   horizontal: AppStyles.spacingL,
                                   vertical: AppStyles.spacingM,
                                 ),
@@ -193,7 +199,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
                                   border: Border.all(
                                     color: colors.accent.withValues(alpha: 0.2),
-                                    width: 1,
                                   ),
                                 ),
                                 child: Row(
@@ -203,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       themeProvider.getThemeIcon(themeProvider.currentTheme),
                                       style: const TextStyle(fontSize: 18),
                                     ),
-                                    SizedBox(width: AppStyles.spacingS),
+                                    const SizedBox(width: AppStyles.spacingS),
                                     Text(
                                       themeProvider.themeName,
                                       style: TextStyle(
@@ -221,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         // 快捷键帮助按钮 (仅桌面平台显示)
                         if (isDesktop || isWeb)
                           Padding(
-                            padding: EdgeInsets.fromLTRB(
+                            padding: const EdgeInsets.fromLTRB(
                               AppStyles.spacingXL,
                               0,
                               AppStyles.spacingXL,
@@ -235,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 },
                                 borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
                                 child: Container(
-                                  padding: EdgeInsets.symmetric(
+                                  padding: const EdgeInsets.symmetric(
                                     horizontal: AppStyles.spacingL,
                                     vertical: AppStyles.spacingM,
                                   ),
@@ -244,7 +249,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
                                     border: Border.all(
                                       color: colors.border,
-                                      width: 1,
                                     ),
                                   ),
                                   child: Row(
@@ -255,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         size: 18,
                                         color: colors.textSecondary,
                                       ),
-                                      SizedBox(width: AppStyles.spacingS),
+                                      const SizedBox(width: AppStyles.spacingS),
                                       Text(
                                         '快捷键',
                                         style: TextStyle(
@@ -283,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: _buildTopDragArea(),
                         ),
                       Expanded(
-                        child: _screens[_selectedIndex],
+                        child: _cachedScreens[_selectedIndex],
                       ),
                       if (hasCurrentSong) MiniPlayer(
                         onArtistTap: _navigateToSearch,
@@ -307,6 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return KeyboardShortcutService.handleKeyEvent(
             event,
             musicProvider,
+            Provider.of<FavoriteProvider>(context, listen: false),
             context,
             onSearchRequested: () {
               // Ctrl+F: 切换到搜索页面
@@ -334,14 +339,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final colors = Provider.of<ThemeProvider>(context).colors;
     
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppStyles.spacingM, vertical: AppStyles.spacingXS),
+      padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingM, vertical: AppStyles.spacingXS),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
           child: Container(
-            padding: EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingM),
+            padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingM),
             decoration: BoxDecoration(
               color: isSelected
                   ? colors.accent.withValues(alpha: 0.12)
@@ -355,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   size: 22,
                   color: isSelected ? colors.accent : colors.textSecondary,
                 ),
-                SizedBox(width: AppStyles.spacingM),
+                const SizedBox(width: AppStyles.spacingM),
                 Text(
                   label,
                   style: TextStyle(
@@ -398,7 +403,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTitleBar(ThemeColors colors) {
     return Container(
-      padding: EdgeInsets.all(AppStyles.spacingL),
+      padding: const EdgeInsets.all(AppStyles.spacingL),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,12 +417,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     try {
                       appWindow.close();
                     } catch (e) {
-                      // 忽略错误
+                      Logger.warning('关闭窗口失败', 'HomeScreen');
                     }
                   }
                 },
               ),
-              SizedBox(width: AppStyles.spacingS),
+              const SizedBox(width: AppStyles.spacingS),
               _buildMacOSButton(
                 color: const Color(0xFFFEBC2E),
                 onPressed: () {
@@ -425,12 +430,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     try {
                       appWindow.minimize();
                     } catch (e) {
-                      // 忽略错误
+                      Logger.warning('最小化窗口失败', 'HomeScreen');
                     }
                   }
                 },
               ),
-              SizedBox(width: AppStyles.spacingS),
+              const SizedBox(width: AppStyles.spacingS),
               _buildMacOSButton(
                 color: const Color(0xFF28C840),
                 onPressed: () {
@@ -438,14 +443,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     try {
                       appWindow.maximizeOrRestore();
                     } catch (e) {
-                      // 忽略错误
+                      Logger.warning('最大化窗口失败', 'HomeScreen');
                     }
                   }
                 },
               ),
             ],
           ),
-          SizedBox(height: AppStyles.spacingL),
+          const SizedBox(height: AppStyles.spacingL),
           Text(
             'Hai Music',
             style: TextStyle(

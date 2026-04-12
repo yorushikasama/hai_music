@@ -1,19 +1,22 @@
-import 'dart:io' as io;
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io' as io;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/downloaded_song.dart';
 import '../models/song.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
-import '../theme/app_styles.dart';
-import '../services/download_service.dart';
 import '../services/download_manager.dart';
+import '../services/download_service.dart';
 import '../services/local_audio_scanner.dart';
-import '../widgets/mini_player.dart';
-import '../utils/logger.dart';
+import '../theme/app_styles.dart';
 import '../utils/format_utils.dart';
+import '../utils/logger.dart';
+import '../widgets/mini_player.dart';
 import 'downloaded/downloaded_header.dart';
 import 'downloaded/downloaded_songs_list.dart';
 
@@ -56,8 +59,8 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
         });
       }
     });
-    _loadDownloadedSongs();
-    _loadLocalSongs(); // 从缓存加载本地歌曲
+    unawaited(_loadDownloadedSongs());
+    unawaited(_loadLocalSongs()); // 从缓存加载本地歌曲
   }
   
   @override
@@ -111,8 +114,8 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
       final cachedJson = prefs.getString('local_scanned_songs');
       
       if (cachedJson != null && cachedJson.isNotEmpty) {
-        final List<dynamic> jsonList = jsonDecode(cachedJson);
-        final songs = jsonList.map((json) => DownloadedSong.fromJson(json)).toList();
+        final List<dynamic> jsonList = jsonDecode(cachedJson) as List<dynamic>;
+        final songs = jsonList.map((json) => DownloadedSong.fromJson(json as Map<String, dynamic>)).toList();
         
         if (mounted) {
           setState(() {
@@ -144,7 +147,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
     
     // 显示加载对话框
     if (mounted) {
-      showDialog(
+      unawaited(showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (context) => Center(
@@ -190,7 +193,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
             ),
           ),
         ),
-      );
+      ));
     }
     
     try {
@@ -211,7 +214,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
           SnackBar(
             content: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -235,19 +238,18 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
+            content: const Row(
               children: [
                 Icon(Icons.error_outline, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     '扫描失败\n请确保已授予存储权限',
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14),
                   ),
                 ),
               ],
             ),
-            duration: const Duration(seconds: 4),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.red.shade700,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -368,7 +370,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                           platform: d.platform,
                         )).toList();
 
-                    musicProvider.playSong(song, playlist: allSongs);
+                    unawaited(musicProvider.playSong(song, playlist: allSongs));
                   },
                   onDelete: _showDeleteDialog,
                 ),
@@ -376,11 +378,11 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
           ),
           // Mini 播放器
           if (musicProvider.currentSong != null)
-            Positioned(
+            const Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              child: const MiniPlayer(),
+              child: MiniPlayer(),
             ),
         ],
       ),
@@ -477,7 +479,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
             size: 80,
             color: colors.textSecondary.withValues(alpha: 0.5),
           ),
-          SizedBox(height: AppStyles.spacingL),
+          const SizedBox(height: AppStyles.spacingL),
           Text(
             isSearchEmpty ? '未找到相关歌曲' : '还没有下载的歌曲',
             style: TextStyle(
@@ -486,7 +488,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
               color: colors.textPrimary,
             ),
           ),
-          SizedBox(height: AppStyles.spacingS),
+          const SizedBox(height: AppStyles.spacingS),
           Text(
             isSearchEmpty 
                 ? '试试其他关键词吧' 
@@ -505,7 +507,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
   void _showDeleteDialog(DownloadedSong song) {
     final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
     
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: colors.card,
@@ -542,7 +544,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   );
-                  _loadDownloadedSongs();
+                  unawaited(_loadDownloadedSongs());
                 } else {
                   messenger.showSnackBar(
                     SnackBar(
@@ -568,20 +570,11 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
   }
   /// 将文件路径转换为正确的 file:// URI
   String _convertToFileUri(String filePath) {
-    // Windows: C:\Users\... → file:///C:/Users/...
-    // Unix: /home/... → file:///home/...
-    String uri;
-    if (io.Platform.isWindows) {
-      // Windows 路径转换：反斜杠改为正斜杠
-      final normalizedPath = filePath.replaceAll('\\', '/');
-      uri = 'file:///$normalizedPath';
-    } else {
-      // Unix 路径
-      uri = 'file://$filePath';
-    }
+    final uri = Uri.file(filePath, windows: io.Platform.isWindows);
+    final uriString = uri.toString();
     Logger.info('原始路径: $filePath', 'FileUri');
-    Logger.info('转换后URI: $uri', 'FileUri');
-    return uri;
+    Logger.info('转换后URI: $uriString', 'FileUri');
+    return uriString;
   }
 
   /// 批量删除
@@ -629,13 +622,13 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
 
     // 显示加载对话框
     if (!mounted) return;
-    showDialog(
+    unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => Center(
         child: CircularProgressIndicator(color: colors.accent),
       ),
-    );
+    ));
 
     int successCount = 0;
     final downloadManager = DownloadManager();

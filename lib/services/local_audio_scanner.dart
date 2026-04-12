@@ -1,7 +1,9 @@
 import 'dart:io';
+
+import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:on_audio_query/on_audio_query.dart';
-import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+
 import '../models/downloaded_song.dart';
 import '../utils/logger.dart';
 
@@ -46,9 +48,8 @@ class LocalAudioScanner {
       return [];
     }
 
-    // Windows/macOS/Linux 使用文件系统扫描
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      return await _scanDesktopAudio();
+      return _scanDesktopAudio();
     }
 
     // Android/iOS 使用 MediaStore
@@ -93,16 +94,16 @@ class LocalAudioScanner {
     Logger.info('开始扫描桌面平台音频文件...', 'LocalScanner');
     
     final List<DownloadedSong> allSongs = [];
-    final List<String> musicDirs = _getDesktopMusicDirectories();
+    final List<String> musicDirs = getAllScanDirectories();
     
     for (final dir in musicDirs) {
       final directory = Directory(dir);
-      if (!await directory.exists()) continue;
+      if (!directory.existsSync()) continue;
       
       Logger.debug('扫描目录: $dir', 'LocalScanner');
       
       try {
-        await for (var entity in directory.list(recursive: true)) {
+        await for (final entity in directory.list(recursive: true)) {
           if (entity is File) {
             final ext = entity.path.split('.').last.toLowerCase();
             if (_isSupportedFormat(ext)) {
@@ -132,6 +133,15 @@ class LocalAudioScanner {
         dirs.addAll([
           '$userProfile\\Music',
           '$userProfile\\Downloads',
+          '$userProfile\\Desktop',
+          '$userProfile\\Documents',
+        ]);
+      }
+      final publicPath = Platform.environment['PUBLIC'];
+      if (publicPath != null) {
+        dirs.addAll([
+          '$publicPath\\Music',
+          '$publicPath\\Videos',
         ]);
       }
     } else if (Platform.isMacOS || Platform.isLinux) {
@@ -140,12 +150,31 @@ class LocalAudioScanner {
         dirs.addAll([
           '$home/Music',
           '$home/Downloads',
+          '$home/Desktop',
+          '$home/Documents',
         ]);
       }
     }
     
     return dirs;
   }
+
+  /// 添加自定义扫描目录
+  void addCustomDirectory(String directory) {
+    if (directory.isNotEmpty && !_customDirectories.contains(directory)) {
+      _customDirectories.add(directory);
+      Logger.info('添加自定义扫描目录: $directory', 'LocalScanner');
+    }
+  }
+
+  /// 获取所有扫描目录（包括自定义目录）
+  List<String> getAllScanDirectories() {
+    final dirs = _getDesktopMusicDirectories();
+    dirs.addAll(_customDirectories);
+    return dirs;
+  }
+
+  final List<String> _customDirectories = [];
 
   /// 检查是否为支持的音频格式
   bool _isSupportedFormat(String ext) {
@@ -158,7 +187,7 @@ class LocalAudioScanner {
   /// 解析桌面平台音频文件（使用 audio_metadata_reader 读取真实元数据）
   Future<DownloadedSong?> _parseDesktopAudioFile(File file) async {
     try {
-      final stat = await file.stat();
+      final stat = file.statSync();
       String title = '未知标题';
       String artist = '未知艺术家';
       String album = '未知专辑';
@@ -166,7 +195,7 @@ class LocalAudioScanner {
       
       // 尝试读取音频元数据（支持 MP3, M4A, FLAC, OGG, WAV 等）
       try {
-        final metadata = readMetadata(file, getImage: false);
+        final metadata = readMetadata(file);
         
         // 提取元数据
         title = metadata.title ?? _getFileNameWithoutExt(file);
@@ -188,7 +217,6 @@ class LocalAudioScanner {
         title: title,
         artist: artist,
         album: album,
-        coverUrl: '',
         localAudioPath: file.path,
         duration: duration,
         platform: 'local',
@@ -236,7 +264,6 @@ class LocalAudioScanner {
         title: song.title,
         artist: song.artist ?? '未知艺术家',
         album: song.album ?? '未知专辑',
-        coverUrl: '', // 封面通过 queryArtwork 获取
         localAudioPath: song.data,
         duration: song.duration != null ? (song.duration! ~/ 1000) : null, // 转换毫秒为秒
         platform: 'local',

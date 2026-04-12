@@ -1,6 +1,8 @@
+import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../models/play_history.dart';
 import '../models/song.dart';
 import '../providers/music_provider.dart';
@@ -25,7 +27,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    unawaited(_loadHistory());
     _searchController.addListener(_onSearchChanged);
   }
   
@@ -88,7 +90,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
-                  offset: Offset(0, 2),
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
@@ -98,12 +100,12 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                 IconButton(
                   icon: Icon(Icons.arrow_back_ios_new, color: colors.textPrimary, size: 20),
                   onPressed: () => Navigator.pop(context),
-                  padding: EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(8),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 // 标题
                 Icon(Icons.history, color: colors.accent, size: 26),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Text(
                   '最近播放',
                   style: TextStyle(
@@ -113,7 +115,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                     letterSpacing: 0.5,
                   ),
                 ),
-                Spacer(),
+                const Spacer(),
                 // 清空按钮
                 if (_history.isNotEmpty)
                   TextButton.icon(
@@ -121,24 +123,24 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: Text('清空历史记录'),
-                          content: Text('确定要清空所有播放历史吗？'),
+                          title: const Text('清空历史记录'),
+                          content: const Text('确定要清空所有播放历史吗？'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
-                              child: Text('取消'),
+                              child: const Text('取消'),
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(context, true),
-                              child: Text('确定', style: TextStyle(color: Colors.red)),
+                              child: const Text('确定', style: TextStyle(color: Colors.red)),
                             ),
                           ],
                         ),
                       );
                       
-                      if (confirm == true) {
+                      if (confirm ?? false) {
                         await musicProvider.historyService.clearHistory();
-                        _loadHistory();
+                        unawaited(_loadHistory());
                       }
                     },
                     icon: Icon(Icons.delete_outline, color: colors.textSecondary, size: 20),
@@ -147,13 +149,13 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                       style: TextStyle(color: colors.textSecondary),
                     ),
                   ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 // 刷新按钮
                 IconButton(
                   icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
                   onPressed: _loadHistory,
                   tooltip: '刷新',
-                  padding: EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(8),
                 ),
               ],
             ),
@@ -172,9 +174,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.clear, color: colors.textSecondary),
-                          onPressed: () {
-                            _searchController.clear();
-                          },
+                          onPressed: _searchController.clear,
                         )
                       : null,
                   filled: true,
@@ -212,7 +212,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
             size: 80,
             color: colors.textSecondary.withValues(alpha: 0.5),
           ),
-          SizedBox(height: AppStyles.spacingL),
+          const SizedBox(height: AppStyles.spacingL),
           Text(
             '暂无播放记录',
             style: TextStyle(
@@ -221,7 +221,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
               color: colors.textPrimary,
             ),
           ),
-          SizedBox(height: AppStyles.spacingS),
+          const SizedBox(height: AppStyles.spacingS),
           Text(
             '播放过的歌曲会显示在这里',
             style: TextStyle(
@@ -243,7 +243,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.search_off, size: 64, color: colors.textSecondary.withValues(alpha: 0.5)),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               '没有找到匹配的记录',
               style: TextStyle(color: colors.textSecondary, fontSize: 16),
@@ -254,14 +254,14 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
     }
     
     return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       itemCount: displayList.length,
       itemBuilder: (context, index) {
         final history = displayList[index];
         final isPlaying = musicProvider.currentSong?.id == history.id;
         
         return Padding(
-          padding: EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 12),
           child: _buildHistoryItem(history, isPlaying, colors, musicProvider),
         );
       },
@@ -284,13 +284,12 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
           color: isPlaying
               ? colors.accent.withValues(alpha: 0.3)
               : colors.border.withValues(alpha: 0.1),
-          width: 1,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
-            offset: Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -305,15 +304,14 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
               artist: history.artist,
               album: history.album,
               coverUrl: history.coverUrl,
-              audioUrl: '',
               duration: history.duration,
               platform: history.platform,
             );
             
-            musicProvider.playSong(song);
+            unawaited(musicProvider.playSong(song));
           },
           child: Padding(
-            padding: EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
                 // 封面图
@@ -356,7 +354,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                       ),
                   ],
                 ),
-                SizedBox(width: 14),
+                const SizedBox(width: 14),
                 // 歌曲信息
                 Expanded(
                   child: Column(
@@ -373,7 +371,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         history.artist,
                         style: TextStyle(
@@ -384,7 +382,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
                         _formatPlayedTime(history.playedAt),
                         style: TextStyle(
@@ -395,7 +393,7 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                     ],
                   ),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 // 删除按钮
                 IconButton(
                   icon: Icon(Icons.close, color: colors.textSecondary.withValues(alpha: 0.6), size: 20),
@@ -405,8 +403,8 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                     });
                     musicProvider.historyService.removeHistory(history.id);
                   },
-                  padding: EdgeInsets.all(8),
-                  constraints: BoxConstraints(),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),

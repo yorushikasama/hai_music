@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:audio_service/audio_service.dart';
+
 import '../models/song.dart';
 import '../utils/logger.dart';
-import 'audio_player_interface.dart';
 import 'audio_player_factory.dart';
-import 'song_url_service.dart';
+import 'audio_player_interface.dart';
 import 'smart_cache_service.dart';
+import 'song_url_service.dart';
 
 /// 重构后的 AudioHandler 实现
 /// 修复了播放列表管理问题，支持完整的播放列表功能
@@ -22,12 +24,14 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
   AudioServiceRepeatMode _repeatMode = AudioServiceRepeatMode.none;
   AudioServiceShuffleMode _shuffleMode = AudioServiceShuffleMode.none;
   
+  double _currentSpeed = 1.0;
+  
   // 会话恢复：记录上次播放位置，首次 play 时跳过去
   Duration? _pendingInitialPosition;
   bool _hasPendingInitialPosition = false;
   
   // 订阅管理
-  final List<StreamSubscription> _subscriptions = [];
+  final List<StreamSubscription<void>> _subscriptions = [];
 
   // 歌曲 URL 服务（负责获取和缓存播放链接）
   final SongUrlService _urlService = SongUrlService();
@@ -41,50 +45,63 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
   }
   
   Completer<void>? _initializeCompleter;
-  
-  Future<void> get ready => _initializeCompleter!.future;
-  
+  Object? _initializationError;
+
+  Future<void> get ready {
+    if (_initializationError != null) {
+      return Future.error(_initializationError!);
+    }
+    return _initializeCompleter?.future ?? Future.value();
+  }
+
   Future<void> _initializeHandler() async {
     Logger.info('初始化 AudioHandler', 'AudioHandler');
-    
-    // 创建音频播放器
-    _audioPlayer = AudioPlayerFactory.createPlayer();
-    
-    // 监听播放状态变化
-    _subscriptions.add(_audioPlayer.playingStream.listen((playing) {
-      _broadcastState();
-    }));
-    
-    // 监听播放位置变化
-    _subscriptions.add(_audioPlayer.positionStream.listen((position) {
-      _broadcastState();
-    }));
 
-    // 监听总时长变化，更新当前 MediaItem 的 duration
-    _subscriptions.add(_audioPlayer.durationStream.listen((duration) {
-      if (duration != null && _queue.isNotEmpty &&
-          _currentIndex >= 0 && _currentIndex < _queue.length) {
-        final current = _queue[_currentIndex];
-        final updated = current.copyWith(duration: duration);
-        _queue[_currentIndex] = updated;
-        mediaItem.add(updated);
-        queue.add(List.unmodifiable(_queue));
-        Logger.debug('⏱️ 更新当前媒体项时长: ${duration.inSeconds}s (${current.title})', 'AudioHandler');
+    try {
+      _audioPlayer = AudioPlayerFactory.createPlayer();
+
+      _subscriptions.add(_audioPlayer.playingStream.listen((playing) {
         _broadcastState();
+      }));
+      
+      DateTime? lastPositionBroadcast;
+      _subscriptions.add(_audioPlayer.positionStream.listen((position) {
+        final now = DateTime.now();
+        if (lastPositionBroadcast == null ||
+            now.difference(lastPositionBroadcast!).inMilliseconds >= 500) {
+          lastPositionBroadcast = now;
+          _broadcastState();
+        }
+      }));
+
+      _subscriptions.add(_audioPlayer.durationStream.listen((duration) {
+        if (duration != null && _queue.isNotEmpty &&
+            _currentIndex >= 0 && _currentIndex < _queue.length) {
+          final current = _queue[_currentIndex];
+          final updated = current.copyWith(duration: duration);
+          _queue[_currentIndex] = updated;
+          mediaItem.add(updated);
+          queue.add(List.unmodifiable(_queue));
+          Logger.debug('更新当前媒体项时长: ${duration.inSeconds}s (${current.title})', 'AudioHandler');
+          _broadcastState();
+        }
+      }));
+      
+      _subscriptions.add(_audioPlayer.completionStream.listen((_) {
+        _handlePlaybackCompleted();
+      }));
+      
+      _broadcastState();
+      
+      Logger.success('AudioHandler 初始化完成', 'AudioHandler');
+    } catch (e, stackTrace) {
+      Logger.error('AudioHandler 初始化失败', e, stackTrace, 'AudioHandler');
+      _initializationError = e;
+      if (_initializeCompleter != null && !_initializeCompleter!.isCompleted) {
+        _initializeCompleter!.completeError(e);
       }
-    }));
-    
-    // 监听播放完成
-    _subscriptions.add(_audioPlayer.completionStream.listen((_) {
-      _handlePlaybackCompleted();
-    }));
-    
-    // 初始化播放状态
-    _broadcastState();
-    
-    Logger.success('AudioHandler 初始化完成', 'AudioHandler');
-    
-    // 标记初始化完成
+    }
+
     if (_initializeCompleter != null && !_initializeCompleter!.isCompleted) {
       _initializeCompleter!.complete();
     }
@@ -199,6 +216,7 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
       platform: baseSong.platform,
       r2CoverUrl: baseSong.r2CoverUrl,
       lyricsLrc: baseSong.lyricsLrc,
+      lyricsTrans: baseSong.lyricsTrans,
     );
 
     // 用带 URL 的 Song 更新队列中的 MediaItem
@@ -215,6 +233,11 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
     // 真正开始播放
     try {
       await _audioPlayer.play(songWithUrl);
+      if (_currentSpeed != 1.0) {
+        try { await _audioPlayer.setSpeed(_currentSpeed); } catch (e) {
+          Logger.debug('设置播放速度失败', 'AudioHandler');
+        }
+      }
       Logger.info('[_playAtIndex] 播放器播放调用成功', 'AudioHandler');
     } catch (e, stackTrace) {
       Logger.error('[_playAtIndex] 播放失败: ${songWithUrl.title}', e, stackTrace, 'AudioHandler');
@@ -224,9 +247,9 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
 
     // 异步缓存歌曲（不阻塞播放）
     Logger.info('🎵 [AudioHandler] 开始异步缓存歌曲: ${songWithUrl.title}', 'AudioHandler');
-    _cacheService.cacheOnPlay(songWithUrl).catchError((e) {
+    unawaited(_cacheService.cacheOnPlay(songWithUrl).catchError((Object e) {
       Logger.error('🎵 [AudioHandler] 缓存歌曲失败: ${songWithUrl.title}', e, null, 'AudioHandler');
-    });
+    }));
 
     // 预加载下一首歌曲
     _preloadNextSong();
@@ -462,6 +485,7 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
   
   @override
   Future<void> setSpeed(double speed) async {
+    _currentSpeed = speed;
     await _audioPlayer.setSpeed(speed);
     Logger.debug('设置播放速度: $speed', 'AudioHandler');
     _broadcastState();
@@ -549,21 +573,23 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
   }
   
   /// 处理播放完成
-  void _handlePlaybackCompleted() {
+  Future<void> _handlePlaybackCompleted() async {
     Logger.info('播放完成', 'AudioHandler');
     
     switch (_repeatMode) {
       case AudioServiceRepeatMode.one:
-        // 单曲循环：重新播放
-        _audioPlayer.seek(Duration.zero);
-        _audioPlayer.resume();
+        try {
+          await _audioPlayer.seek(Duration.zero);
+          await _audioPlayer.resume();
+        } catch (e, st) {
+          Logger.error('单曲循环重播失败', e, st, 'AudioHandler');
+        }
         break;
         
       case AudioServiceRepeatMode.all:
       case AudioServiceRepeatMode.none:
       case AudioServiceRepeatMode.group:
-        // 播放下一首
-        skipToNext();
+        unawaited(skipToNext());
         break;
     }
   }
@@ -579,21 +605,21 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
     try {
       playing = _audioPlayer.isPlaying;
       Logger.debug('[_broadcastState] 获取播放状态: $playing', 'AudioHandler');
-    } catch (e, stackTrace) {
+    } catch (e) {
       Logger.warning('[_broadcastState] 获取播放状态失败: $e', 'AudioHandler');
     }
     
     try {
       position = _audioPlayer.position;
       Logger.debug('[_broadcastState] 获取播放位置: ${position.inSeconds}s', 'AudioHandler');
-    } catch (e, stackTrace) {
+    } catch (e) {
       Logger.warning('[_broadcastState] 获取播放位置失败: $e', 'AudioHandler');
     }
     
     try {
       speed = _audioPlayer.speed;
       Logger.debug('[_broadcastState] 获取播放速度: $speed', 'AudioHandler');
-    } catch (e, stackTrace) {
+    } catch (e) {
       Logger.warning('[_broadcastState] 获取播放速度失败: $e', 'AudioHandler');
     }
 
@@ -689,7 +715,7 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
         Logger.debug('[_getProcessingState] 返回 loading', 'AudioHandler');
         return AudioProcessingState.loading;
       }
-    } catch (e, stackTrace) {
+    } catch (e) {
       Logger.warning('[_getProcessingState] 获取处理状态失败: $e', 'AudioHandler');
       return AudioProcessingState.idle;
     }
@@ -709,6 +735,7 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
         'platform': song.platform,
         'r2CoverUrl': song.r2CoverUrl,
         'lyricsLrc': song.lyricsLrc,
+        'lyricsTrans': song.lyricsTrans,
       },
     );
   }
@@ -722,10 +749,11 @@ class MusicAudioHandler extends BaseAudioHandler with SeekHandler {
       album: mediaItem.album ?? '',
       duration: mediaItem.duration?.inSeconds,
       coverUrl: mediaItem.artUri?.toString() ?? '',
-      audioUrl: mediaItem.extras?['audioUrl'] ?? '',
-      platform: mediaItem.extras?['platform'],
-      r2CoverUrl: mediaItem.extras?['r2CoverUrl'],
-      lyricsLrc: mediaItem.extras?['lyricsLrc'],
+      audioUrl: (mediaItem.extras?['audioUrl'] ?? '').toString(),
+      platform: mediaItem.extras?['platform']?.toString(),
+      r2CoverUrl: mediaItem.extras?['r2CoverUrl']?.toString(),
+      lyricsLrc: mediaItem.extras?['lyricsLrc']?.toString(),
+      lyricsTrans: mediaItem.extras?['lyricsTrans']?.toString(),
     );
   }
   

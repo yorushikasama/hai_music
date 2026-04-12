@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/logger.dart';
 
 /// 歌词存储服务：读/写 Supabase 数据库中的 song_lyrics 表
 class LyricsService {
@@ -86,7 +87,6 @@ class LyricsService {
     try {
       final data = <String, dynamic>{
         'lyrics_lrc': lyrics,
-        'updated_at': DateTime.now().toIso8601String(),
       };
       if (translation != null && translation.isNotEmpty) {
         data['lyrics_translation'] = translation;
@@ -99,8 +99,8 @@ class LyricsService {
       }
       // 使用 id 字段作为 songId 的匹配条件
       await client.from('favorite_songs').upsert({...data, 'id': songId});
-    } catch (_) {
-      // 忽略写入异常
+    } catch (e) {
+      Logger.warning('保存歌词到数据库失败', 'LyricsService');
     }
   }
 }

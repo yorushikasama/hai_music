@@ -109,7 +109,7 @@ class ClipboardConfigParser {
     // 尝试多种分隔符：冒号、等号
     final separators = [':', '：', '='];
     
-    for (var separator in separators) {
+    for (final separator in separators) {
       if (line.contains(separator)) {
         final parts = line.split(separator);
         if (parts.length >= 2) {
@@ -171,7 +171,7 @@ R2 自定义域名: your-custom-domain.com
     ];
 
     int matchCount = 0;
-    for (var keyword in requiredKeywords) {
+    for (final keyword in requiredKeywords) {
       if (lowerText.contains(keyword)) {
         matchCount++;
       }

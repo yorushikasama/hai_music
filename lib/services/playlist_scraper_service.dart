@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import '../utils/logger.dart';
+import 'dio_client.dart';
 
-/// 推荐歌单数据模型
 class RecommendedPlaylist {
   final String id;
   final String title;
@@ -19,15 +19,14 @@ class RecommendedPlaylist {
   }
 }
 
-/// QQ音乐推荐歌单爬虫服务
 class PlaylistScraperService {
-  final Dio _dio = Dio();
+  final Dio _dio = DioClient().dio;
 
   /// 获取QQ音乐首页推荐歌单
   Future<List<RecommendedPlaylist>> fetchRecommendedPlaylists() async {
     try {
       Logger.network('开始请求 QQ音乐首页...', 'PlaylistScraper');
-      final response = await _dio.get(
+      final response = await _dio.get<dynamic>(
         'https://y.qq.com/',
         options: Options(
           headers: {
@@ -45,7 +44,7 @@ class PlaylistScraperService {
         return [];
       }
       
-      final htmlContent = response.data;
+      final htmlContent = response.data as String;
       Logger.debug('HTML 内容长度: ${htmlContent.length}', 'PlaylistScraper');
       
       final playlists = <RecommendedPlaylist>[];

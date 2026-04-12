@@ -7,15 +7,33 @@ import 'audio_player_interface.dart';
 class MobileAudioPlayer implements AudioPlayerInterface {
   AudioPlayer? _player;
   bool _isDisposed = false;
+  Completer<void>? _initLock;
 
   final StreamController<bool> _playingController = StreamController<bool>.broadcast();
   final StreamController<void> _completionController = StreamController<void>.broadcast();
 
-  final List<StreamSubscription> _subscriptions = [];
+  final List<StreamSubscription<void>> _subscriptions = [];
 
   MobileAudioPlayer() {
     Logger.info('【构造函数】MobileAudioPlayer 创建', 'MobileAudioPlayer');
     _initialize();
+  }
+
+  Future<void> _ensureInitialized() async {
+    if (_player != null || _isDisposed) return;
+    if (_initLock != null) {
+      await _initLock!.future;
+      return;
+    }
+    _initLock = Completer<void>();
+    try {
+      await _initialize();
+      _initLock!.complete();
+    } catch (e) {
+      _initLock!.completeError(e);
+      _initLock = null;
+      rethrow;
+    }
   }
 
   Future<void> _initialize() async {
@@ -111,7 +129,7 @@ class MobileAudioPlayer implements AudioPlayerInterface {
 
     if (_player == null) {
       Logger.info('【播放】播放器未初始化，重新初始化...', 'MobileAudioPlayer');
-      await _initialize();
+      await _ensureInitialized();
     }
 
     try {
@@ -160,12 +178,11 @@ class MobileAudioPlayer implements AudioPlayerInterface {
         }
       } else {
         Logger.warning('【播放】播放器未准备好，当前状态: $currentState', 'MobileAudioPlayer');
-        // 等待播放器准备好
         await for (final state in _safePlayer.processingStateStream) {
           Logger.info('【播放】等待播放器准备，当前状态: $state', 'MobileAudioPlayer');
           if (state == ProcessingState.ready) {
             Logger.info('【播放】播放器已准备好，开始播放...', 'MobileAudioPlayer');
-            await _safePlayer.play();
+            await _safePlayer.play().timeout(const Duration(seconds: 15));
             Logger.success('【播放】player.play() 调用成功', 'MobileAudioPlayer');
             break;
           }
@@ -179,10 +196,13 @@ class MobileAudioPlayer implements AudioPlayerInterface {
       Logger.success('【播放】歌曲播放流程完成: ${song.title}', 'MobileAudioPlayer');
     } on PlayerException catch (e, stackTrace) {
       Logger.error('【播放】播放器异常: code=${e.code}, message=${e.message}', e, stackTrace, 'MobileAudioPlayer');
+      rethrow;
     } on PlayerInterruptedException catch (e, stackTrace) {
       Logger.error('【播放】播放中断: ${e.message}', e, stackTrace, 'MobileAudioPlayer');
+      rethrow;
     } catch (e, stackTrace) {
       Logger.error('【播放】播放失败: $e', e, stackTrace, 'MobileAudioPlayer');
+      rethrow;
     }
   }
 

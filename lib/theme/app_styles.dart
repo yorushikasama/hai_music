@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'dart:ui';
+
+import 'package:flutter/material.dart';
 
 /// 统一样式常量 - 颜色、间距、圆角、阴影、模糊
 class AppStyles {
@@ -16,15 +17,9 @@ class AppStyles {
   static const double spacingM = 12.0;
   static const double spacingL = 16.0;
   static const double spacingXL = 20.0;
-  static const double spacingXXL = 32.0;
 
-  // ============ 模糊强度 ============
   static const double blurStrength = 20.0;
 
-  // ============ macOS 控制按钮尺寸 ============
-  static const double macosButtonSize = 12.0;
-
-  // ============ 侧边栏 ============
   static const double sidebarWidth = 240.0;
 
   // ============ 阴影（根据主题亮暗自动调整） ============
@@ -54,7 +49,7 @@ class AppStyles {
     return BoxDecoration(
       color: color.withValues(alpha: opacity),
       borderRadius: borderRadius ?? BorderRadius.circular(radiusLarge),
-      border: Border.all(color: borderColor, width: 1),
+      border: Border.all(color: borderColor),
       boxShadow: getShadows(isLight),
     );
   }
@@ -78,6 +73,11 @@ class ThemeColors {
   final Color border;
   final Gradient? backgroundGradient;
   final bool isLight;
+  final Color error;
+  final Color warning;
+  final Color success;
+  final Color info;
+  final Color favorite;
 
   const ThemeColors({
     required this.background,
@@ -90,6 +90,11 @@ class ThemeColors {
     required this.border,
     this.backgroundGradient,
     this.isLight = false,
+    this.error = Colors.red,
+    this.warning = Colors.orange,
+    this.success = Colors.green,
+    this.info = Colors.blue,
+    this.favorite = Colors.red,
   });
 
   // 深色主题
@@ -102,7 +107,6 @@ class ThemeColors {
     textSecondary: Color(0xFF9E9E9E),
     accent: Color(0xFF3B82F6),
     border: Color(0x1AFFFFFF),
-    isLight: false,
   );
 
   // 浅色主题
@@ -114,25 +118,7 @@ class ThemeColors {
     textPrimary: Color(0xFF1C1C1E),
     textSecondary: Color(0xFF6E6E73),
     accent: Color(0xFF007AFF),
-    border: Color(0x4DFFFFFF),
-    isLight: true,
-  );
-
-  // macOS 浅色银白主题
-  static const macosLight = ThemeColors(
-    background: Color(0xFFF5F5F7),
-    surface: Color(0xFFFFFFFF),
-    card: Color(0xFFFFFFFF),
-    primary: Color(0xFF1C1C1E),
-    textPrimary: Color(0xFF1C1C1E),
-    textSecondary: Color(0xFF6E6E73),
-    accent: Color(0xFF007AFF),
-    border: Color(0x4DFFFFFF),
-    backgroundGradient: LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [Color(0xFFF5F5F7), Color(0xFFEDEDED)],
-    ),
+    border: Color(0x1A000000),
     isLight: true,
   );
 
@@ -146,7 +132,6 @@ class ThemeColors {
     textSecondary: Color(0xFFB8A5D6),
     accent: Color(0xFF9F7AEA),
     border: Color(0x1AB794F6),
-    isLight: false,
   );
 
   // 蓝色主题
@@ -159,7 +144,6 @@ class ThemeColors {
     textSecondary: Color(0xFFA5C9E8),
     accent: Color(0xFF3B82F6),
     border: Color(0x1A60A5FA),
-    isLight: false,
   );
 
   // 粉色主题
@@ -172,7 +156,6 @@ class ThemeColors {
     textSecondary: Color(0xFFE9C5DB),
     accent: Color(0xFFEC4899),
     border: Color(0x1AF9A8D4),
-    isLight: false,
   );
 
   // 橙色主题
@@ -185,7 +168,6 @@ class ThemeColors {
     textSecondary: Color(0xFFE9D5A8),
     accent: Color(0xFFF59E0B),
     border: Color(0x1AFBBF24),
-    isLight: false,
   );
 
   // 绿色主题
@@ -198,7 +180,6 @@ class ThemeColors {
     textSecondary: Color(0xFFA8E9C5),
     accent: Color(0xFF10B981),
     border: Color(0x1A6EE7B7),
-    isLight: false,
   );
 
   // 彩虹主题
@@ -221,6 +202,5 @@ class ThemeColors {
         Color(0xFF4FACFE),
       ],
     ),
-    isLight: false,
   );
 }

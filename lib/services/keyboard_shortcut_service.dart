@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../utils/logger.dart';
+
+import '../providers/favorite_provider.dart';
 import '../providers/music_provider.dart';
+import '../utils/logger.dart';
 
 /// 键盘快捷键服务
 /// 提供全局快捷键支持,无需自定义配置
@@ -11,7 +13,7 @@ class KeyboardShortcutService {
   /// 统一的日志输出
   static void _log(String message) {
     if (_enableDebugLog) {
-      print(message);
+      Logger.debug(message, 'KeyboardShortcut');
     }
   }
 
@@ -23,6 +25,7 @@ class KeyboardShortcutService {
   static KeyEventResult handleKeyEvent(
     KeyEvent event,
     MusicProvider musicProvider,
+    FavoriteProvider favoriteProvider,
     BuildContext context, {
     VoidCallback? onSearchRequested,
   }) {
@@ -109,7 +112,7 @@ class KeyboardShortcutService {
     if (key == LogicalKeyboardKey.keyD && isCtrlPressed && !isShiftPressed && !isAltPressed) {
       if (musicProvider.currentSong != null) {
         _log('⌨️ [快捷键] Ctrl+D - 收藏/取消收藏');
-        musicProvider.toggleFavorite(musicProvider.currentSong!.id);
+        favoriteProvider.toggleFavorite(musicProvider.currentSong!.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
       }
       return KeyEventResult.handled;
     }
@@ -186,7 +189,7 @@ class KeyboardShortcutService {
   static void showShortcutHelp(BuildContext context) {
     final shortcuts = getShortcutList();
     
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Row(

@@ -1,16 +1,20 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:provider/provider.dart';
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../extensions/duration_extension.dart';
+import '../../providers/audio_settings_provider.dart';
 import '../../providers/music_provider.dart';
-import '../../services/download_manager.dart';
+import '../../providers/sleep_timer_provider.dart';
 import '../../screens/download_progress_screen.dart';
+import '../../services/download_manager.dart';
 import '../../widgets/audio_quality_selector.dart';
 
 /// 显示播放器的“更多”菜单 bottom sheet
 void showPlayerMoreMenu(BuildContext rootContext) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: rootContext,
     backgroundColor: Colors.transparent,
     builder: (sheetContext) => _MoreMenuSheet(rootContext: rootContext),
@@ -19,18 +23,17 @@ void showPlayerMoreMenu(BuildContext rootContext) {
 
 /// 显示定时关闭对话框
 void showSleepTimerDialog(BuildContext context) {
-  final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+  final sleepTimerProvider = Provider.of<SleepTimerProvider>(context, listen: false);
   
-  // 如果定时器已激活，显示管理界面
-  if (musicProvider.sleepTimer.isActive) {
-    _showActiveSleepTimerDialog(context, musicProvider);
+  if (sleepTimerProvider.sleepTimer.isActive) {
+    _showActiveSleepTimerDialog(context, sleepTimerProvider);
     return;
   }
   
   // 否则显示设置界面
   const initialDuration = Duration(minutes: 30);
 
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     builder: (sheetContext) {
@@ -55,8 +58,8 @@ void showSleepTimerDialog(BuildContext context) {
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(20),
+                const Padding(
+                  padding: EdgeInsets.all(20),
                   child: Text(
                     '定时关闭',
                     style: TextStyle(
@@ -105,18 +108,11 @@ void showSleepTimerDialog(BuildContext context) {
                           }
                           
                           // 启动定时器
-                          musicProvider.startSleepTimer(selectedDuration);
+                          sleepTimerProvider.startSleepTimer(selectedDuration);
                           
                           Navigator.pop(sheetContext);
                           
-                          final hours = selectedDuration.inHours;
-                          final minutes = selectedDuration.inMinutes.remainder(60);
-                          String timeText;
-                          if (hours > 0) {
-                            timeText = '$hours小时${minutes > 0 ? '$minutes分钟' : ''}';
-                          } else {
-                            timeText = '$minutes分钟';
-                          }
+                          final timeText = selectedDuration.toShortFormat();
                           
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -124,9 +120,7 @@ void showSleepTimerDialog(BuildContext context) {
                               duration: const Duration(seconds: 3),
                               action: SnackBarAction(
                                 label: '取消',
-                                onPressed: () {
-                                  musicProvider.cancelSleepTimer();
-                                },
+                                onPressed: sleepTimerProvider.cancelSleepTimer,
                               ),
                             ),
                           );
@@ -150,8 +144,8 @@ void showSleepTimerDialog(BuildContext context) {
 }
 
 /// 显示已激活的定时器管理界面
-void _showActiveSleepTimerDialog(BuildContext context, MusicProvider musicProvider) {
-  showModalBottomSheet(
+void _showActiveSleepTimerDialog(BuildContext context, SleepTimerProvider sleepTimerProvider) {
+  showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     builder: (sheetContext) {
@@ -187,7 +181,7 @@ void _showActiveSleepTimerDialog(BuildContext context, MusicProvider musicProvid
                   ),
                   const SizedBox(height: 20),
                   // 倒计时显示
-                  Consumer<MusicProvider>(
+                  Consumer<SleepTimerProvider>(
                     builder: (context, provider, child) {
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -196,7 +190,6 @@ void _showActiveSleepTimerDialog(BuildContext context, MusicProvider musicProvid
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: Colors.orange.withValues(alpha: 0.5),
-                            width: 1,
                           ),
                         ),
                         child: Column(
@@ -232,7 +225,7 @@ void _showActiveSleepTimerDialog(BuildContext context, MusicProvider musicProvid
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () {
-                            musicProvider.extendSleepTimer(const Duration(minutes: 15));
+                            sleepTimerProvider.extendSleepTimer(const Duration(minutes: 15));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('已延长15分钟'),
@@ -255,7 +248,7 @@ void _showActiveSleepTimerDialog(BuildContext context, MusicProvider musicProvid
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            musicProvider.cancelSleepTimer();
+                            sleepTimerProvider.cancelSleepTimer();
                             Navigator.pop(sheetContext);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -288,7 +281,7 @@ void _showActiveSleepTimerDialog(BuildContext context, MusicProvider musicProvid
 
 /// 显示播放列表 bottom sheet
 void showPlaylistDialog(BuildContext context, MusicProvider musicProvider) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
@@ -303,8 +296,8 @@ class _MoreMenuSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MusicProvider>(
-      builder: (context, musicProvider, child) {
+    return Consumer2<MusicProvider, AudioSettingsProvider>(
+      builder: (context, musicProvider, audioSettings, child) {
         return Container(
           decoration: BoxDecoration(
             color: Colors.grey[900],
@@ -325,18 +318,68 @@ class _MoreMenuSheet extends StatelessWidget {
               ),
               // 音质选择
               ListTile(
-                leading: const Icon(Icons.high_quality_rounded, color: Colors.white),
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: audioSettings.audioQuality.gradientColors,
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    audioSettings.audioQuality.icon,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
                 title: const Text(
                   '音质选择',
                   style: TextStyle(color: Colors.white),
                 ),
-                trailing: Text(
-                  musicProvider.audioQuality,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: audioSettings.audioQuality.gradientColors
+                              .map((c) => c.withValues(alpha: 0.3))
+                              .toList(),
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        audioSettings.audioQualityLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: audioSettings.audioQuality.color,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      audioSettings.audioQuality.bitrate,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.white.withValues(alpha: 0.3),
+                      size: 18,
+                    ),
+                  ],
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  showModalBottomSheet(
+                  showModalBottomSheet<void>(
                     context: context,
                     backgroundColor: Colors.transparent,
                     isScrollControlled: true,
@@ -379,11 +422,11 @@ class _MoreMenuSheet extends StatelessWidget {
                   '显示歌词翻译',
                   style: TextStyle(color: Colors.white),
                 ),
-                value: musicProvider.showLyricsTranslation,
+                value: audioSettings.showLyricsTranslation,
                 activeTrackColor: Colors.orange.withValues(alpha: 0.5),
                 activeThumbColor: Colors.orange,
                 onChanged: (value) {
-                  musicProvider.setShowLyricsTranslation(value);
+                  audioSettings.setShowLyricsTranslation(value);
                 },
               ),
               // 下载歌曲
@@ -414,7 +457,7 @@ class _MoreMenuSheet extends StatelessWidget {
                             onPressed: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(
+                                MaterialPageRoute<void>(
                                   builder: (context) => const DownloadProgressScreen(),
                                 ),
                               );
@@ -564,7 +607,7 @@ class _PlaylistSheet extends StatelessWidget {
                       },
                     ),
                     onTap: () {
-                      musicProvider.playSong(song, playlist: musicProvider.playlist);
+                      unawaited(musicProvider.playSong(song, playlist: musicProvider.playlist));
                       Navigator.pop(context);
                     },
                   );

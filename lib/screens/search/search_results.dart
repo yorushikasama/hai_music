@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/song.dart';
+import '../../providers/favorite_provider.dart';
 import '../../providers/theme_provider.dart';
-import '../../providers/music_provider.dart';
 
 class SearchResultsList extends StatelessWidget {
   final List<Song> songs;
@@ -19,17 +19,7 @@ class SearchResultsList extends StatelessWidget {
   final void Function(BuildContext context, String action, Song song) onMenuAction;
 
   const SearchResultsList({
-    super.key,
-    required this.songs,
-    required this.isSelectionMode,
-    required this.selectedIds,
-    required this.isLoadingMore,
-    required this.hasMore,
-    required this.scrollController,
-    required this.onSelectionChanged,
-    required this.onSongTap,
-    required this.onLoadMore,
-    required this.onMenuAction,
+    required this.songs, required this.isSelectionMode, required this.selectedIds, required this.isLoadingMore, required this.hasMore, required this.scrollController, required this.onSelectionChanged, required this.onSongTap, required this.onLoadMore, required this.onMenuAction, super.key,
   });
 
   @override
@@ -107,7 +97,7 @@ class SearchResultsList extends StatelessWidget {
               ? Checkbox(
                   value: isSelected,
                   onChanged: (value) {
-                    onSelectionChanged(song, value == true);
+                    onSelectionChanged(song, value ?? false);
                   },
                   activeColor: colors.accent,
                 )
@@ -162,9 +152,9 @@ class SearchResultsList extends StatelessWidget {
                   itemBuilder: (context) => [
                     PopupMenuItem<String>(
                       value: 'favorite',
-                      child: Consumer<MusicProvider>(
-                        builder: (context, musicProvider, child) {
-                          final isFavorite = musicProvider.isFavorite(song.id);
+                      child: Consumer<FavoriteProvider>(
+                        builder: (context, favoriteProvider, child) {
+                          final isFavorite = favoriteProvider.isFavorite(song.id);
                           return Row(
                             children: [
                               Icon(

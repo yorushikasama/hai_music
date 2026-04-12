@@ -31,14 +31,6 @@ Logger.error('操作失败', error, stackTrace, 'MyClass');
 
 ## 🎯 专用方法
 
-### 播放器日志
-
-```dart
-Logger.player('播放歌曲: ${song.title}', 'MusicProvider');
-Logger.player('暂停播放', 'MusicProvider');
-Logger.player('切换到下一首', 'MusicProvider');
-```
-
 ### 下载日志
 
 ```dart
@@ -80,7 +72,7 @@ Logger.network('网络错误', 'API');
 ```dart
 class MusicProvider {
   void play() {
-    Logger.player('播放', 'MusicProvider');
+    Logger.info('播放', 'MusicProvider');
   }
 }
 ```
@@ -106,7 +98,6 @@ Logger.info('清理完成', 'CacheCleanup');
 | `success()` | ✅ | ✅ 输出 | ❌ 不输出 | 成功操作 |
 | `warning()` | ⚠️ | ✅ 输出 | ✅ 输出 | 警告信息 |
 | `error()` | ❌ | ✅ 输出 | ✅ 输出 | 错误信息 |
-| `player()` | 🎵 | ✅ 输出 | ❌ 不输出 | 播放器操作 |
 | `download()` | ⬇️ | ✅ 输出 | ❌ 不输出 | 下载操作 |
 | `cache()` | 📦 | ✅ 输出 | ❌ 不输出 | 缓存操作 |
 | `database()` | 💾 | ✅ 输出 | ❌ 不输出 | 数据库操作 |
@@ -158,7 +149,7 @@ Logger.info('用户登录', 'Auth');  // 重要操作
 Logger.debug('缓存键: $key', 'Cache');  // 调试信息
 
 // 2. 提供有用的上下文
-Logger.player('播放: ${song.title} - ${song.artist}', 'MusicProvider');
+Logger.info('播放: ${song.title} - ${song.artist}', 'MusicProvider');
 
 // 3. 错误日志包含完整信息
 Logger.error('下载失败', e, stackTrace, 'Download');
@@ -199,12 +190,10 @@ Logger.info('消息', 'MyClass');
 // 之前
 print('✅ 下载完成: ${song.title}');
 print('❌ 下载失败: $e');
-print('🎵 播放: ${song.title}');
 
 // 之后
 Logger.success('下载完成: ${song.title}', 'Download');
 Logger.error('下载失败', e, null, 'Download');
-Logger.player('播放: ${song.title}', 'MusicProvider');
 ```
 
 ### 从 debugPrint 迁移
@@ -227,7 +216,7 @@ Logger.debug('调试信息: $value', 'MyClass');
 class MusicProvider {
   Future<void> playSong(Song song) async {
     try {
-      Logger.player('开始播放: ${song.title}', 'MusicProvider');
+      Logger.info('开始播放: ${song.title}', 'MusicProvider');
       
       final url = await _getSongUrl(song);
       if (url == null) {
@@ -308,7 +297,6 @@ class CacheService {
 
 搜索特定图标：
 ```
-🎵  # 播放器日志
 ⬇️  # 下载日志
 📦  # 缓存日志
 ❌  # 错误日志
@@ -326,9 +314,7 @@ class CacheService {
 ## 📚 更多资源
 
 - [Logger 源码](../lib/utils/logger.dart)
-- [迁移指南](../LOGGER_MIGRATION_GUIDE.md)
-- [迁移总结](../LOGGER_MIGRATION_SUMMARY.md)
 
 ---
 
-**最后更新：** 2025-11-10
+**最后更新：** 2026-04-11

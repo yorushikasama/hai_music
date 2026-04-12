@@ -1,19 +1,32 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
-import '../utils/logger.dart';
-import 'package:provider/provider.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/play_mode.dart';
+import '../providers/audio_settings_provider.dart';
+import '../providers/favorite_provider.dart';
 import '../providers/music_provider.dart';
-import '../theme/app_styles.dart';
 import '../providers/theme_provider.dart';
 import '../screens/player_screen.dart';
-import '../models/play_mode.dart';
+import '../theme/app_styles.dart';
+import '../utils/logger.dart';
 import 'audio_quality_selector.dart';
 
-class MiniPlayer extends StatelessWidget {
+class MiniPlayer extends StatefulWidget {
   final void Function(String artistName)? onArtistTap;
   
   const MiniPlayer({super.key, this.onArtistTap});
+
+  @override
+  State<MiniPlayer> createState() => _MiniPlayerState();
+}
+
+class _MiniPlayerState extends State<MiniPlayer> {
+  bool _isDragging = false;
+  double _dragValue = 0.0;
+  double _volumeBeforeMute = 0.5;
 
   @override
   Widget build(BuildContext context) {
@@ -27,14 +40,16 @@ class MiniPlayer extends StatelessWidget {
 
         return GestureDetector(
           onTap: () {
-            // 点击整个迷你播放器区域不跳转
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const PlayerScreen()),
+            );
           },
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
             child: BackdropFilter(
               filter: AppStyles.backdropBlur,
               child: Container(
-                margin: EdgeInsets.all(AppStyles.spacingM),
+                margin: const EdgeInsets.all(AppStyles.spacingM),
                 decoration: AppStyles.glassDecoration(
                   color: colors.surface,
                   opacity: 0.8,
@@ -46,15 +61,15 @@ class MiniPlayer extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Padding(
-                      padding: EdgeInsets.all(AppStyles.spacingM),
+                      padding: const EdgeInsets.all(AppStyles.spacingM),
                       child: Row(
                         children: [
                           // 封面（点击进入歌词页面）
                           GestureDetector(
                             onTap: () async {
-                              final result = await Navigator.push(
+                              final result = await Navigator.push<dynamic>(
                                 context,
-                                MaterialPageRoute(
+                                MaterialPageRoute<dynamic>(
                                   builder: (context) => const PlayerScreen(),
                                 ),
                               );
@@ -62,8 +77,8 @@ class MiniPlayer extends StatelessWidget {
                               if (result is Map && 
                                   result['action'] == 'search' && 
                                   result['query'] != null &&
-                                  onArtistTap != null) {
-                                onArtistTap!(result['query']);
+                                  widget.onArtistTap != null) {
+                                widget.onArtistTap!(result['query'] as String);
                               }
                             },
                             child: ClipRRect(
@@ -91,7 +106,7 @@ class MiniPlayer extends StatelessWidget {
                               ),
                             ),
                           ),
-                          SizedBox(width: AppStyles.spacingM),
+                          const SizedBox(width: AppStyles.spacingM),
                           // 歌曲信息
                           Expanded(
                             child: Column(
@@ -108,16 +123,16 @@ class MiniPlayer extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                SizedBox(height: AppStyles.spacingXS),
+                                const SizedBox(height: AppStyles.spacingXS),
                                 MouseRegion(
-                                  cursor: onArtistTap != null 
+                                  cursor: widget.onArtistTap != null 
                                       ? SystemMouseCursors.click 
                                       : SystemMouseCursors.basic,
                                   child: GestureDetector(
-                                    onTap: onArtistTap != null
+                                    onTap: widget.onArtistTap != null
                                         ? () {
                                             Logger.debug('点击歌手: ${song.artist}');
-                                            onArtistTap!(song.artist);
+                                            widget.onArtistTap!(song.artist);
                                           }
                                         : null,
                                     behavior: HitTestBehavior.opaque,
@@ -138,10 +153,10 @@ class MiniPlayer extends StatelessWidget {
                               ],
                             ),
                           ),
-                          SizedBox(width: AppStyles.spacingM),
+                          const SizedBox(width: AppStyles.spacingM),
                           // 根据平台显示不同的控制按钮
-                          if (isAndroid) ..._buildAndroidControls(musicProvider, colors, song.id)
-                          else ..._buildWindowsControls(musicProvider, colors, song.id),
+                          if (isAndroid) ..._buildAndroidControls(context, musicProvider, colors, song.id)
+                          else ..._buildWindowsControls(context, musicProvider, colors, song.id),
                         ],
                       ),
                     ),
@@ -157,20 +172,31 @@ class MiniPlayer extends StatelessWidget {
                         overlayColor: colors.accent.withValues(alpha: 0.2),
                       ),
                       child: Slider(
-                        value: () {
-                          if (musicProvider.totalDuration.inSeconds <= 0) return 0.0;
-                          final value = musicProvider.currentPosition.inSeconds /
-                              musicProvider.totalDuration.inSeconds;
-                          if (value.isNaN || value.isInfinite) return 0.0;
-                          return value.clamp(0.0, 1.0);
-                        }(),
+                        value: _isDragging
+                            ? _dragValue
+                            : () {
+                                if (musicProvider.totalDuration.inSeconds <= 0) return 0.0;
+                                final value = musicProvider.currentPosition.inSeconds /
+                                    musicProvider.totalDuration.inSeconds;
+                                if (value.isNaN || value.isInfinite) return 0.0;
+                                return value.clamp(0.0, 1.0);
+                              }(),
                         onChanged: (value) {
+                          setState(() {
+                            _isDragging = true;
+                            _dragValue = value;
+                          });
+                        },
+                        onChangeEnd: (value) {
                           if (musicProvider.totalDuration.inSeconds > 0) {
                             final position = Duration(
                               seconds: (value * musicProvider.totalDuration.inSeconds).round(),
                             );
                             musicProvider.seekTo(position);
                           }
+                          setState(() {
+                            _isDragging = false;
+                          });
                         },
                       ),
                     ),
@@ -185,19 +211,19 @@ class MiniPlayer extends StatelessWidget {
   }
 
   // Android 端控制按钮 - Spotify 风格
-  List<Widget> _buildAndroidControls(MusicProvider musicProvider, ThemeColors colors, String songId) {
+  List<Widget> _buildAndroidControls(BuildContext context, MusicProvider musicProvider, ThemeColors colors, String songId) {
+    final favoriteProvider = Provider.of<FavoriteProvider>(context);
     return [
       const Spacer(),
-      // 收藏按钮
       IconButton(
         icon: Icon(
-          musicProvider.isFavorite(songId)
+          favoriteProvider.isFavorite(songId)
               ? Icons.favorite
               : Icons.favorite_border,
         ),
         iconSize: 28,
-        color: musicProvider.isFavorite(songId)
-            ? const Color(0xFF1DB954) // Spotify 绿色
+        color: favoriteProvider.isFavorite(songId)
+            ? const Color(0xFF1DB954)
             : colors.textSecondary.withValues(alpha: 0.7),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(
@@ -205,10 +231,10 @@ class MiniPlayer extends StatelessWidget {
           minHeight: 40,
         ),
         onPressed: () {
-          musicProvider.toggleFavorite(songId);
+          Provider.of<FavoriteProvider>(context, listen: false).toggleFavorite(songId, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
         },
       ),
-      SizedBox(width: AppStyles.spacingS),
+      const SizedBox(width: AppStyles.spacingS),
       // 播放/暂停按钮
       Container(
         width: 44,
@@ -243,12 +269,13 @@ class MiniPlayer extends StatelessWidget {
           ),
         ),
       ),
-      SizedBox(width: AppStyles.spacingM),
+      const SizedBox(width: AppStyles.spacingM),
     ];
   }
 
   // Windows 端控制按钮 - 完整控制
-  List<Widget> _buildWindowsControls(MusicProvider musicProvider, ThemeColors colors, String songId) {
+  List<Widget> _buildWindowsControls(BuildContext context, MusicProvider musicProvider, ThemeColors colors, String songId) {
+    final favoriteProvider = Provider.of<FavoriteProvider>(context);
     return [
       // 上一曲
       IconButton(
@@ -261,7 +288,7 @@ class MiniPlayer extends StatelessWidget {
       ),
       // 播放/暂停
       Container(
-        margin: EdgeInsets.symmetric(horizontal: AppStyles.spacingXS),
+        margin: const EdgeInsets.symmetric(horizontal: AppStyles.spacingXS),
         decoration: BoxDecoration(
           color: colors.accent,
           shape: BoxShape.circle,
@@ -323,35 +350,88 @@ class MiniPlayer extends StatelessWidget {
       ),
       // 音质选择按钮
       Builder(
-        builder: (context) => IconButton(
-          icon: const Icon(Icons.high_quality),
-          iconSize: 20,
-          color: colors.textSecondary,
-          tooltip: '音质: ${musicProvider.audioQuality}',
-          onPressed: () {
-            showModalBottomSheet(
-              context: context,
-              backgroundColor: Colors.transparent,
-              isScrollControlled: true,
-              builder: (context) => const AudioQualitySelector(),
-            );
-          },
-        ),
+        builder: (context) {
+          final quality = Provider.of<AudioSettingsProvider>(context).audioQuality;
+          return Semantics(
+            label: '音质选择，当前: ${quality.semanticLabel}',
+            button: true,
+            child: GestureDetector(
+              onTap: () {
+                showModalBottomSheet<void>(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  isScrollControlled: true,
+                  builder: (context) => const AudioQualitySelector(),
+                );
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      quality.gradientColors[0].withValues(alpha: 0.2),
+                      quality.gradientColors[1].withValues(alpha: 0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: quality.color.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, animation) =>
+                          ScaleTransition(scale: animation, child: child),
+                      child: Icon(
+                        quality.icon,
+                        key: ValueKey(quality.name),
+                        size: 14,
+                        color: quality.color,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, animation) =>
+                          FadeTransition(opacity: animation, child: child),
+                      child: Text(
+                        quality.label,
+                        key: ValueKey(quality.label),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: quality.color,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
-      // 收藏按钮
       IconButton(
         icon: Icon(
-          musicProvider.isFavorite(songId)
+          favoriteProvider.isFavorite(songId)
               ? Icons.favorite
               : Icons.favorite_border,
         ),
         iconSize: 20,
-        color: musicProvider.isFavorite(songId)
+        color: favoriteProvider.isFavorite(songId)
             ? Colors.red
             : colors.textSecondary,
         tooltip: '收藏',
         onPressed: () {
-          musicProvider.toggleFavorite(songId);
+          Provider.of<FavoriteProvider>(context, listen: false).toggleFavorite(songId, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
         },
       ),
       const SizedBox(width: 8),
@@ -376,10 +456,9 @@ class MiniPlayer extends StatelessWidget {
     final Offset buttonPosition = button.localToGlobal(Offset.zero, ancestor: overlay);
     final Size buttonSize = button.size;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierColor: Colors.transparent,
-      barrierDismissible: true,
       builder: (context) => Consumer<MusicProvider>(
         builder: (context, musicProvider, child) {
           return Stack(
@@ -397,7 +476,6 @@ class MiniPlayer extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: colors.border,
-                        width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
@@ -415,9 +493,10 @@ class MiniPlayer extends StatelessWidget {
                         InkWell(
                           onTap: () {
                             if (musicProvider.volume > 0) {
+                              _volumeBeforeMute = musicProvider.volume;
                               musicProvider.setVolume(0);
                             } else {
-                              musicProvider.setVolume(0.5);
+                              musicProvider.setVolume(_volumeBeforeMute);
                             }
                           },
                           borderRadius: BorderRadius.circular(20),

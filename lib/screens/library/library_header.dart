@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/theme_provider.dart';
+import '../../services/download_manager.dart';
 import '../../utils/platform_utils.dart';
 import '../../widgets/draggable_window_area.dart';
-import '../../services/download_manager.dart';
 
 /// 音乐库页面顶部 SliverAppBar 头部
 class LibraryHeader extends StatelessWidget {
@@ -13,10 +13,7 @@ class LibraryHeader extends StatelessWidget {
   final VoidCallback onClearCache;
 
   const LibraryHeader({
-    super.key,
-    required this.onOpenDownloadProgress,
-    required this.onOpenStorageConfig,
-    required this.onClearCache,
+    required this.onOpenDownloadProgress, required this.onOpenStorageConfig, required this.onClearCache, super.key,
   });
 
   @override

@@ -92,7 +92,6 @@ linter:
     file_names: true
     hash_and_equals: true
     implementation_imports: true
-    invariant_booleans: false
     iterable_contains_unrelated_type: true
     join_return_with_assignment: false
     leading_newlines_in_multiline_strings: true
@@ -104,7 +103,6 @@ linter:
     no_adjacent_strings_in_list: true
     no_duplicate_case_values: true
     no_logic_in_create_state: true
-    no_runtimeType_toString_in_equals: true
     non_constant_identifier_names: true
     null_check_on_nullable_type_parameter: true
     null_closures: true

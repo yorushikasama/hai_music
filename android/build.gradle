@@ -6,8 +6,6 @@ buildscript {
     }
 
     dependencies {
-        // AGP 8.6 和 8.7 有 bug 会影响 ExoPlayer，使用 8.5.0 或 8.8.0+
-        classpath 'com.android.tools.build:gradle:8.5.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -16,7 +14,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // 添加官方 Flutter Maven 仓库
         maven { url 'https://storage.googleapis.com/download.flutter.io' }
     }
 }
@@ -26,7 +23,6 @@ subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
 subprojects {
-    // 为缺少 namespace 的插件自动添加
     afterEvaluate { subproject ->
         if (subproject.hasProperty('android')) {
             subproject.android {
@@ -41,18 +37,16 @@ subprojects {
                     }
                 }
                 
-                // 统一设置 JVM 目标为 1.8
                 compileOptions {
-                    sourceCompatibility JavaVersion.VERSION_1_8
-                    targetCompatibility JavaVersion.VERSION_1_8
+                    sourceCompatibility JavaVersion.VERSION_11
+                    targetCompatibility JavaVersion.VERSION_11
                 }
             }
         }
         
-        // 为 Kotlin 项目设置 JVM 目标
         tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
             kotlinOptions {
-                jvmTarget = "1.8"
+                jvmTarget = "11"
             }
         }
     }

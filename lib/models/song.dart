@@ -5,11 +5,11 @@ class Song {
   final String album;
   final String coverUrl;
   final String audioUrl;
-  final int? duration; // 时长（秒）
-  final String? platform; // 音乐平台：netease, qq, kugou等
-  final String? r2CoverUrl; // R2对象存储的封面URL
-  final String? lyricsLrc; // LRC 格式歌词
-  final String? lyricsTrans; // 歌词翻译
+  final int? duration;
+  final String? platform;
+  final String? r2CoverUrl;
+  final String? lyricsLrc;
+  final String? lyricsTrans;
 
   Song({
     required this.id,
@@ -27,39 +27,37 @@ class Song {
 
   factory Song.fromJson(Map<String, dynamic> json) {
     return Song(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      artist: json['artist'] ?? '',
-      album: json['album'] ?? '',
-      coverUrl: json['coverUrl'] ?? '',
-      audioUrl: json['audioUrl'] ?? '',
+      id: (json['id'] ?? '') as String,
+      title: (json['title'] ?? '') as String,
+      artist: (json['artist'] ?? '') as String,
+      album: (json['album'] ?? '') as String,
+      coverUrl: (json['coverUrl'] ?? '') as String,
+      audioUrl: (json['audioUrl'] ?? '') as String,
       duration: json['duration'] as int?,
-      platform: json['platform'],
-      r2CoverUrl: json['r2CoverUrl'],
-      lyricsLrc: json['lyricsLrc'],
-      lyricsTrans: json['lyricsTrans'],
+      platform: json['platform'] as String?,
+      r2CoverUrl: json['r2CoverUrl'] as String?,
+      lyricsLrc: json['lyricsLrc'] as String?,
+      lyricsTrans: json['lyricsTrans'] as String?,
     );
   }
 
-  /// 从音乐API返回的数据创建Song对象
   factory Song.fromApiJson(Map<String, dynamic> json, String platform) {
-    // 解析时长（可能是秒数或字符串格式）
     int durationSeconds = 0;
     if (json['time'] != null) {
       if (json['time'] is int) {
-        durationSeconds = json['time'];
+        durationSeconds = json['time'] as int;
       } else if (json['time'] is String) {
-        durationSeconds = int.tryParse(json['time']) ?? 0;
+        durationSeconds = int.tryParse(json['time'] as String) ?? 0;
       }
     }
 
     return Song(
-      id: json['id']?.toString() ?? '',
-      title: json['name'] ?? json['title'] ?? '',
+      id: (json['id'] ?? '').toString(),
+      title: (json['name'] ?? json['title'] ?? '') as String,
       artist: json['artist']?.toString().split(',').first ?? '',
-      album: json['album'] ?? '',
-      coverUrl: json['pic'] ?? json['cover'] ?? '',
-      audioUrl: json['url'] ?? '',
+      album: (json['album'] ?? '') as String,
+      coverUrl: (json['pic'] ?? json['cover'] ?? '') as String,
+      audioUrl: (json['url'] ?? '') as String,
       duration: durationSeconds,
       platform: platform,
     );

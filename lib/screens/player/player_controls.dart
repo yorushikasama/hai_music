@@ -4,26 +4,40 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../extensions/duration_extension.dart';
 import '../../models/play_mode.dart';
 import '../../models/song.dart';
+import '../../providers/audio_settings_provider.dart';
+import '../../providers/favorite_provider.dart';
 import '../../providers/music_provider.dart';
-import '../../services/download_service.dart';
-import '../../services/download_manager.dart';
+import '../../providers/theme_provider.dart';
 import '../../screens/download_progress_screen.dart';
+import '../../services/download_manager.dart';
+import '../../services/download_service.dart';
 import '../../utils/platform_utils.dart';
 import '../../widgets/audio_quality_selector.dart';
-
+import '../../widgets/speed_selector.dart';
 import 'player_bottom_sheets.dart';
 
-class PlayerControlPanel extends StatelessWidget {
+class PlayerControlPanel extends StatefulWidget {
   final MusicProvider musicProvider;
   final DownloadService downloadService;
 
   const PlayerControlPanel({
-    super.key,
-    required this.musicProvider,
-    required this.downloadService,
+    required this.musicProvider, required this.downloadService, super.key,
   });
+
+  @override
+  State<PlayerControlPanel> createState() => _PlayerControlPanelState();
+}
+
+class _PlayerControlPanelState extends State<PlayerControlPanel> {
+  bool _isDragging = false;
+  double _dragValue = 0.0;
+  double _volumeBeforeMute = 0.5;
+
+  MusicProvider get musicProvider => widget.musicProvider;
+  DownloadService get downloadService => widget.downloadService;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +54,6 @@ class PlayerControlPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(isAndroid ? 20 : 24),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
         ),
       ),
       child: ClipRRect(
@@ -63,6 +76,20 @@ class PlayerControlPanel extends StatelessWidget {
   }
 
   Widget _buildProgressBar(BuildContext context, MusicProvider musicProvider) {
+    final sliderValue = _isDragging
+        ? _dragValue
+        : () {
+            if (musicProvider.totalDuration.inSeconds <= 0) return 0.0;
+            final value = musicProvider.currentPosition.inSeconds /
+                musicProvider.totalDuration.inSeconds;
+            if (value.isNaN || value.isInfinite) return 0.0;
+            return value.clamp(0.0, 1.0);
+          }();
+
+    final displayPosition = _isDragging
+        ? Duration(seconds: (_dragValue * musicProvider.totalDuration.inSeconds).round())
+        : musicProvider.currentPosition;
+
     return Column(
       children: [
         SliderTheme(
@@ -76,20 +103,23 @@ class PlayerControlPanel extends StatelessWidget {
             overlayColor: Colors.white.withValues(alpha: 0.2),
           ),
           child: Slider(
-            value: () {
-              if (musicProvider.totalDuration.inSeconds <= 0) return 0.0;
-              final value = musicProvider.currentPosition.inSeconds /
-                  musicProvider.totalDuration.inSeconds;
-              if (value.isNaN || value.isInfinite) return 0.0;
-              return value.clamp(0.0, 1.0);
-            }(),
+            value: sliderValue,
             onChanged: (value) {
+              setState(() {
+                _isDragging = true;
+                _dragValue = value;
+              });
+            },
+            onChangeEnd: (value) {
               if (musicProvider.totalDuration.inSeconds > 0) {
                 final position = Duration(
                   seconds: (value * musicProvider.totalDuration.inSeconds).round(),
                 );
                 musicProvider.seekTo(position);
               }
+              setState(() {
+                _isDragging = false;
+              });
             },
           ),
         ),
@@ -99,14 +129,14 @@ class PlayerControlPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                musicProvider.formatDuration(musicProvider.currentPosition),
+                displayPosition.toMinutesSeconds(),
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.6),
                 ),
               ),
               Text(
-                musicProvider.formatDuration(musicProvider.totalDuration),
+                musicProvider.totalDuration.toMinutesSeconds(),
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.6),
@@ -145,8 +175,8 @@ class PlayerControlPanel extends StatelessWidget {
               onPressed: () => musicProvider.playNext(),
             ),
             if (song != null)
-              musicProvider.isFavoriteOperationInProgress(song.id)
-                  ? SizedBox(
+              Provider.of<FavoriteProvider>(context).isFavoriteOperationInProgress(song.id)
+                  ? const SizedBox(
                       width: 44,
                       height: 44,
                       child: Center(
@@ -155,25 +185,46 @@ class PlayerControlPanel extends StatelessWidget {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
                           ),
                         ),
                       ),
                     )
                   : _buildSimpleButton(
-                      icon: musicProvider.isFavorite(song.id)
+                      icon: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
                           ? Icons.favorite
                           : Icons.favorite_border,
                       size: 28,
-                      color: musicProvider.isFavorite(song.id)
+                      color: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
                           ? Colors.red
                           : null,
                       onPressed: () async {
-                        await musicProvider.toggleFavorite(song.id);
+                        await Provider.of<FavoriteProvider>(context, listen: false).toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
                       },
                     )
             else
               const SizedBox(width: 44),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildQualityButton(context, musicProvider),
+            const SizedBox(width: 16),
+            _buildSpeedButton(context, musicProvider),
+            const SizedBox(width: 16),
+            _buildSimpleButton(
+              icon: Icons.timer_outlined,
+              size: 22,
+              onPressed: () => showSleepTimerDialog(context),
+            ),
+            const SizedBox(width: 16),
+            _buildSimpleButton(
+              icon: Icons.queue_music_rounded,
+              size: 22,
+              onPressed: () => showPlaylistDialog(context, musicProvider),
+            ),
           ],
         ),
       ],
@@ -220,8 +271,8 @@ class PlayerControlPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (song != null)
-                musicProvider.isFavoriteOperationInProgress(song.id)
-                    ? SizedBox(
+                Provider.of<FavoriteProvider>(context).isFavoriteOperationInProgress(song.id)
+                    ? const SizedBox(
                         width: 40,
                         height: 40,
                         child: Center(
@@ -230,21 +281,21 @@ class PlayerControlPanel extends StatelessWidget {
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
                             ),
                           ),
                         ),
                       )
                     : _buildSimpleButton(
-                        icon: musicProvider.isFavorite(song.id)
+                        icon: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
                             ? Icons.favorite
                             : Icons.favorite_border,
                         size: 24,
-                        color: musicProvider.isFavorite(song.id)
+                        color: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
                             ? Colors.red
                             : null,
                         onPressed: () async {
-                          await musicProvider.toggleFavorite(song.id);
+                          await Provider.of<FavoriteProvider>(context, listen: false).toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
                         },
                       ),
               const SizedBox(width: 16),
@@ -254,18 +305,9 @@ class PlayerControlPanel extends StatelessWidget {
                 const SizedBox(width: 16),
               _buildVolumeControl(context, musicProvider),
               const SizedBox(width: 16),
-              _buildSimpleButton(
-                icon: Icons.high_quality_rounded,
-                size: 24,
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    isScrollControlled: true,
-                    builder: (context) => const AudioQualitySelector(),
-                  );
-                },
-              ),
+              _buildQualityButton(context, musicProvider),
+              const SizedBox(width: 16),
+              _buildSpeedButton(context, musicProvider),
               const SizedBox(width: 16),
               _buildSimpleButton(
                 icon: Icons.timer_outlined,
@@ -282,6 +324,156 @@ class PlayerControlPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildQualityButton(BuildContext context, MusicProvider musicProvider) {
+    final audioSettings = Provider.of<AudioSettingsProvider>(context);
+    final quality = audioSettings.audioQuality;
+    final isSwitching = audioSettings.isQualitySwitching;
+    return Semantics(
+      label: isSwitching
+          ? '正在切换音质...'
+          : '音质选择，当前: ${quality.semanticLabel}',
+      button: true,
+      child: TextButton(
+        onPressed: isSwitching
+            ? null
+            : () {
+                showModalBottomSheet<void>(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  isScrollControlled: true,
+                  builder: (context) => const AudioQualitySelector(),
+                );
+              },
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                quality.gradientColors[0].withValues(alpha: 0.25),
+                quality.gradientColors[1].withValues(alpha: 0.15),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: quality.color.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isSwitching)
+                SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: quality.color.withValues(alpha: 0.9),
+                  ),
+                )
+              else
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) {
+                    return ScaleTransition(scale: animation, child: child);
+                  },
+                  child: Icon(
+                    quality.icon,
+                    key: ValueKey(quality.name),
+                    size: 15,
+                    color: quality.color.withValues(alpha: 0.9),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: Text(
+                  quality.label,
+                  key: ValueKey(quality.label),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: quality.color.withValues(alpha: 0.95),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpeedButton(BuildContext context, MusicProvider musicProvider) {
+    final currentSpeed = musicProvider.playbackSpeed;
+    final colors = Provider.of<ThemeProvider>(context).colors;
+    return Semantics(
+      label: currentSpeed.semanticLabel,
+      button: true,
+      child: TextButton(
+        onPressed: () => showSpeedSelector(context),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: currentSpeed.isNormal
+                ? colors.accent.withValues(alpha: 0.1)
+                : colors.accent.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: currentSpeed.isNormal
+                  ? colors.border.withValues(alpha: 0.3)
+                  : colors.accent.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.speed_rounded,
+                size: 15,
+                color: currentSpeed.isNormal
+                    ? colors.textSecondary.withValues(alpha: 0.7)
+                    : colors.accent.withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 4),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 300),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: currentSpeed.isNormal ? FontWeight.w600 : FontWeight.w700,
+                  color: currentSpeed.isNormal
+                      ? colors.textSecondary.withValues(alpha: 0.7)
+                      : colors.accent.withValues(alpha: 0.95),
+                  letterSpacing: 0.3,
+                ),
+                child: Text(currentSpeed.label),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -308,6 +500,7 @@ class PlayerControlPanel extends StatelessWidget {
   }
 
   Widget _buildPlayButton(MusicProvider musicProvider) {
+    final isLoading = musicProvider.isLoading;
     return Container(
       width: 64,
       height: 64,
@@ -331,14 +524,25 @@ class PlayerControlPanel extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => musicProvider.togglePlayPause(),
+          onTap: isLoading ? null : () => musicProvider.togglePlayPause(),
           borderRadius: BorderRadius.circular(32),
-          child: Icon(
-            musicProvider.isPlaying
-                ? Icons.pause_rounded
-                : Icons.play_arrow_rounded,
-            color: Colors.black87,
-            size: 36,
+          child: Center(
+            child: isLoading
+                ? const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black87),
+                    ),
+                  )
+                : Icon(
+                    musicProvider.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: Colors.black87,
+                    size: 36,
+                  ),
           ),
         ),
       ),
@@ -382,10 +586,9 @@ class PlayerControlPanel extends StatelessWidget {
     final Offset buttonPosition = button.localToGlobal(Offset.zero, ancestor: overlay);
     final Size buttonSize = button.size;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierColor: Colors.transparent,
-      barrierDismissible: true,
       builder: (dialogContext) => Consumer<MusicProvider>(
         builder: (context, musicProvider, child) {
           return Stack(
@@ -403,7 +606,6 @@ class PlayerControlPanel extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.1),
-                        width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
@@ -420,9 +622,10 @@ class PlayerControlPanel extends StatelessWidget {
                         InkWell(
                           onTap: () {
                             if (musicProvider.volume > 0) {
+                              _volumeBeforeMute = musicProvider.volume;
                               musicProvider.setVolume(0);
                             } else {
-                              musicProvider.setVolume(0.5);
+                              musicProvider.setVolume(_volumeBeforeMute);
                             }
                           },
                           borderRadius: BorderRadius.circular(20),
@@ -538,7 +741,7 @@ class PlayerControlPanel extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        MaterialPageRoute<void>(
                           builder: (context) => const DownloadProgressScreen(),
                         ),
                       );

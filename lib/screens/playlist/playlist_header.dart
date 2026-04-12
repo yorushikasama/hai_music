@@ -1,10 +1,10 @@
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart' if (dart.library.html) '';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/playlist.dart';
 import '../../providers/theme_provider.dart';
@@ -16,9 +16,7 @@ class PlaylistDetailHeader extends StatelessWidget {
   final int totalCount;
 
   const PlaylistDetailHeader({
-    super.key,
-    required this.playlist,
-    required this.totalCount,
+    required this.playlist, required this.totalCount, super.key,
   });
 
   @override

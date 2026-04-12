@@ -1,28 +1,32 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import '../models/song.dart';
+import 'package:path/path.dart' as path;
+
+import '../extensions/string_extension.dart';
 import '../models/downloaded_song.dart';
-import 'preferences_cache_service.dart';
+import '../models/song.dart';
+import '../utils/logger.dart';
+import 'dio_client.dart';
 import 'lyrics_service.dart';
 import 'music_api_service.dart';
-import '../utils/logger.dart';
+import 'preferences_service.dart';
+import 'storage_path_manager.dart';
 
-/// 歌曲下载服务
 class DownloadService {
   static final DownloadService _instance = DownloadService._internal();
   factory DownloadService() => _instance;
   DownloadService._internal();
 
-  final Dio _dio = Dio();
-  final _prefsCache = PreferencesCacheService();
+  final Dio _dio = DioClient().dio;
+  final _prefsCache = PreferencesService();
   final _lyricsService = LyricsService();
   final _apiService = MusicApiService();
-  
-  // 根据平台使用不同的存储键，确保各平台数据隔离
+  final _pathManager = StoragePathManager();
+
   String get _downloadedSongsKey {
     if (kIsWeb) {
       return 'downloaded_songs_web';
@@ -40,31 +44,50 @@ class DownloadService {
       return 'downloaded_songs_unknown';
     }
   }
-  
-  // 下载进度回调
-  final Map<String, double> _downloadProgress = {};
-  
-  /// 初始化
+
+  DateTime? _lastFileValidationTime;
+  List<DownloadedSong>? _cachedDownloadedSongs;
+
+  Completer<void>? _lock;
+
+  Future<T> _synchronized<T>(Future<T> Function() action) async {
+    while (_lock != null) {
+      try {
+        await _lock!.future;
+      } catch (e) {
+        Logger.debug('下载锁等待中断', 'Download');
+      }
+    }
+    _lock = Completer<void>();
+    try {
+      final result = await action();
+      return result;
+    } finally {
+      final lock = _lock!;
+      _lock = null;
+      lock.complete();
+    }
+  }
+
   Future<void> init() async {
     await _prefsCache.init();
   }
 
-  /// 获取下载目录
   Future<Directory> _getDownloadDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final downloadDir = Directory(path.join(appDir.path, 'HaiMusic', 'Downloads'));
-    
-    if (!await downloadDir.exists()) {
-      await downloadDir.create(recursive: true);
-    }
-    
-    return downloadDir;
+    return _pathManager.getDownloadsDir();
   }
 
-  /// 下载歌曲
   Future<DownloadedSong?> downloadSong(
     Song song, {
-    Function(double)? onProgress,
+    void Function(double)? onProgress,
+  }) async {
+    return downloadSongWithCancel(song, cancelToken: CancelToken(), onProgress: onProgress);
+  }
+
+  Future<DownloadedSong?> downloadSongWithCancel(
+    Song song, {
+    required CancelToken cancelToken,
+    void Function(double)? onProgress,
   }) async {
     try {
       if (song.audioUrl.isEmpty) {
@@ -73,16 +96,14 @@ class DownloadService {
       }
 
       final downloadDir = await _getDownloadDirectory();
-      
-      // 创建安全的文件名
-      final safeFileName = _sanitizeFileName('${song.title}_${song.artist}');
-      final audioFileName = '$safeFileName.mp3';
+
+      final safeFileName = '${song.title}_${song.artist}'.toSafeFileName();
+      final currentQuality = _prefsCache.getAudioQuality();
+      final audioFileName = '$safeFileName${currentQuality.fileExtension}';
       final audioFilePath = path.join(downloadDir.path, audioFileName);
-      
-      // 检查是否已下载
-      if (await File(audioFilePath).exists()) {
+
+      if (File(audioFilePath).existsSync()) {
         Logger.warning('歌曲已存在: $audioFileName', 'Download');
-        // 返回已存在的下载记录
         final downloaded = await getDownloadedSongs();
         return downloaded.firstWhere(
           (d) => d.id == song.id,
@@ -101,21 +122,18 @@ class DownloadService {
       }
 
       Logger.download('开始下载: ${song.title} - ${song.artist}', 'Download');
-      
-      // 下载音频文件
+
       await _dio.download(
         song.audioUrl,
         audioFilePath,
+        cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
           if (total != -1) {
-            final progress = received / total;
-            _downloadProgress[song.id] = progress;
-            onProgress?.call(progress);
+            onProgress?.call(received / total);
           }
         },
       );
 
-      // 下载封面（可选）
       String? localCoverPath;
       if (song.coverUrl.isNotEmpty) {
         try {
@@ -128,15 +146,12 @@ class DownloadService {
         }
       }
 
-      // 下载歌词（可选）
       String? localLyricsPath;
       String? localTransPath;
       try {
-        // 1. 优先使用 Song 对象中的歌词和翻译
         String? lyrics = song.lyricsLrc;
         String? translation = song.lyricsTrans;
 
-        // 2. 如果没有，从数据库获取
         if (lyrics == null || lyrics.isEmpty) {
           final dbLyrics = await _lyricsService.getLyricsWithTranslation(song.id);
           if (dbLyrics != null) {
@@ -145,13 +160,11 @@ class DownloadService {
           }
         }
 
-        // 3. 如果还是没有，从 API 获取
         if (lyrics == null || lyrics.isEmpty) {
           final apiLyrics = await _apiService.getLyricsWithTranslation(songId: song.id);
           if (apiLyrics != null) {
             lyrics = apiLyrics['lrc'];
             translation = apiLyrics['trans'];
-            // 保存到数据库供下次使用
             if (lyrics != null && lyrics.isNotEmpty) {
               await _lyricsService.saveLyrics(
                 songId: song.id,
@@ -164,18 +177,16 @@ class DownloadService {
           }
         }
 
-        // 4. 保存歌词到本地文件
         if (lyrics != null && lyrics.isNotEmpty) {
           final lyricsFileName = '$safeFileName.lrc';
           localLyricsPath = path.join(downloadDir.path, lyricsFileName);
-          await File(localLyricsPath).writeAsString(lyrics, encoding: utf8);
+          File(localLyricsPath).writeAsStringSync(lyrics);
           Logger.success('歌词下载成功', 'Download');
 
-          // 5. 如果有翻译,也保存到本地文件
           if (translation != null && translation.isNotEmpty) {
             final transFileName = '${safeFileName}_trans.lrc';
             localTransPath = path.join(downloadDir.path, transFileName);
-            await File(localTransPath).writeAsString(translation, encoding: utf8);
+            File(localTransPath).writeAsStringSync(translation);
             Logger.success('歌词翻译下载成功', 'Download');
           }
         } else {
@@ -200,69 +211,70 @@ class DownloadService {
         downloadedAt: DateTime.now(),
       );
 
-      // 保存到本地记录
       await _saveDownloadedSong(downloadedSong);
-      
-      _downloadProgress.remove(song.id);
+
       Logger.success('下载完成: ${song.title}', 'Download');
-      
+
       return downloadedSong;
     } catch (e) {
       Logger.error('下载失败', e, null, 'Download');
-      _downloadProgress.remove(song.id);
       return null;
     }
   }
 
-  /// 获取下载进度
-  double? getDownloadProgress(String songId) {
-    return _downloadProgress[songId];
-  }
-
-  /// 保存下载记录
   Future<void> _saveDownloadedSong(DownloadedSong song) async {
-    final downloaded = await getDownloadedSongs();
-    
-    // 避免重复
-    downloaded.removeWhere((s) => s.id == song.id);
-    downloaded.insert(0, song);
-    
-    final jsonList = downloaded.map((s) => s.toJson()).toList();
-    await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
+    await _synchronized(() async {
+      final downloaded = await getDownloadedSongs();
+
+      downloaded.removeWhere((s) => s.id == song.id);
+      downloaded.insert(0, song);
+
+      final jsonList = downloaded.map((s) => s.toJson()).toList();
+      await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
+      _cachedDownloadedSongs = downloaded;
+    });
   }
 
-  /// 获取所有下载的歌曲（自动过滤无效记录）
   Future<List<DownloadedSong>> getDownloadedSongs() async {
     try {
       final jsonStr = await _prefsCache.getString(_downloadedSongsKey);
       if (jsonStr == null || jsonStr.isEmpty) {
         return [];
       }
-      
-      final List<dynamic> jsonList = jsonDecode(jsonStr);
-      final allSongs = jsonList.map((json) => DownloadedSong.fromJson(json)).toList();
-      
-      // 验证文件是否存在，过滤无效记录
+
+      final List<dynamic> jsonList = jsonDecode(jsonStr) as List<dynamic>;
+      final allSongs = jsonList.map((json) => DownloadedSong.fromJson(json as Map<String, dynamic>)).toList();
+
+      final shouldValidate = _cachedDownloadedSongs == null ||
+          _lastFileValidationTime == null ||
+          DateTime.now().difference(_lastFileValidationTime!).inMinutes >= 5;
+
+      if (!shouldValidate && _cachedDownloadedSongs != null) {
+        return _cachedDownloadedSongs!;
+      }
+
       final validSongs = <DownloadedSong>[];
       bool hasInvalidRecords = false;
-      
+
       for (final song in allSongs) {
         final audioFile = File(song.localAudioPath);
-        if (await audioFile.exists()) {
+        if (audioFile.existsSync()) {
           validSongs.add(song);
         } else {
           Logger.warning('发现无效记录: ${song.title} (文件不存在)', 'Download');
           hasInvalidRecords = true;
         }
       }
-      
-      // 如果有无效记录，更新存储
+
       if (hasInvalidRecords && validSongs.length != allSongs.length) {
         final jsonList = validSongs.map((s) => s.toJson()).toList();
         await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
         Logger.success('已清理 ${allSongs.length - validSongs.length} 条无效记录', 'Download');
       }
-      
+
+      _cachedDownloadedSongs = validSongs;
+      _lastFileValidationTime = DateTime.now();
+
       return validSongs;
     } catch (e) {
       Logger.error('读取下载列表失败', e, null, 'Download');
@@ -270,124 +282,106 @@ class DownloadService {
     }
   }
 
-  /// 检查歌曲是否已下载（同时验证文件是否存在）
   Future<bool> isDownloaded(String songId) async {
     final downloaded = await getDownloadedSongs();
     final song = downloaded.where((s) => s.id == songId).firstOrNull;
-    
+
     if (song == null) {
-      return false; // 记录不存在
+      return false;
     }
-    
-    // 验证音频文件是否真实存在
+
     final audioFile = File(song.localAudioPath);
-    final exists = await audioFile.exists();
-    
-    // 如果文件不存在，清理无效记录
+    final exists = audioFile.existsSync();
+
     if (!exists) {
       Logger.warning('检测到无效记录，文件不存在: ${song.title}', 'Download');
       await _removeInvalidRecord(songId);
       return false;
     }
-    
+
     return true;
   }
-  
-  /// 移除无效的下载记录
+
   Future<void> _removeInvalidRecord(String songId) async {
-    try {
-      final downloaded = await getDownloadedSongs();
-      downloaded.removeWhere((s) => s.id == songId);
-      final jsonList = downloaded.map((s) => s.toJson()).toList();
-      await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
-      Logger.success('已清理无效记录: $songId', 'Download');
-    } catch (e) {
-      Logger.error('清理无效记录失败', e, null, 'Download');
-    }
+    await _synchronized(() async {
+      try {
+        final downloaded = await getDownloadedSongs();
+        downloaded.removeWhere((s) => s.id == songId);
+        final jsonList = downloaded.map((s) => s.toJson()).toList();
+        await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
+        Logger.success('已清理无效记录: $songId', 'Download');
+      } catch (e) {
+        Logger.error('清理无效记录失败', e, null, 'Download');
+      }
+    });
   }
 
-  /// 删除下载的歌曲
   Future<bool> deleteDownloadedSong(String songId) async {
-    try {
-      final downloaded = await getDownloadedSongs();
-      final song = downloaded.firstWhere((s) => s.id == songId);
-
-      // 删除音频文件
-      final audioFile = File(song.localAudioPath);
-      if (await audioFile.exists()) {
-        await audioFile.delete();
-      }
-
-      // 删除封面文件
-      if (song.localCoverPath != null) {
-        final coverFile = File(song.localCoverPath!);
-        if (await coverFile.exists()) {
-          await coverFile.delete();
+    return _synchronized(() async {
+      try {
+        final downloaded = await getDownloadedSongs();
+        final songIndex = downloaded.indexWhere((s) => s.id == songId);
+        if (songIndex == -1) {
+          Logger.warning('未找到下载记录: $songId', 'Download');
+          return false;
         }
-      }
+        final song = downloaded[songIndex];
 
-      // 删除歌词文件
-      if (song.localLyricsPath != null) {
-        final lyricsFile = File(song.localLyricsPath!);
-        if (await lyricsFile.exists()) {
-          await lyricsFile.delete();
+        final audioFile = File(song.localAudioPath);
+        if (audioFile.existsSync()) {
+          audioFile.deleteSync();
         }
-      }
 
-      // 删除翻译文件
-      if (song.localTransPath != null) {
-        final transFile = File(song.localTransPath!);
-        if (await transFile.exists()) {
-          await transFile.delete();
+        if (song.localCoverPath != null) {
+          final coverFile = File(song.localCoverPath!);
+          if (coverFile.existsSync()) {
+            coverFile.deleteSync();
+          }
         }
+
+        if (song.localLyricsPath != null) {
+          final lyricsFile = File(song.localLyricsPath!);
+          if (lyricsFile.existsSync()) {
+            lyricsFile.deleteSync();
+          }
+        }
+
+        if (song.localTransPath != null) {
+          final transFile = File(song.localTransPath!);
+          if (transFile.existsSync()) {
+            transFile.deleteSync();
+          }
+        }
+
+        downloaded.removeWhere((s) => s.id == songId);
+        final jsonList = downloaded.map((s) => s.toJson()).toList();
+        await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
+
+        _cachedDownloadedSongs = null;
+        _lastFileValidationTime = null;
+
+        Logger.success('删除成功: ${song.title}', 'Download');
+        return true;
+      } catch (e) {
+        Logger.error('删除失败', e, null, 'Download');
+        return false;
       }
-
-      // 从记录中移除
-      downloaded.removeWhere((s) => s.id == songId);
-      final jsonList = downloaded.map((s) => s.toJson()).toList();
-      await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
-
-      Logger.success('删除成功: ${song.title}', 'Download');
-      return true;
-    } catch (e) {
-      Logger.error('删除失败', e, null, 'Download');
-      return false;
-    }
+    });
   }
 
-  /// 清空所有下载
-  Future<bool> clearAllDownloads() async {
-    try {
-      final downloadDir = await _getDownloadDirectory();
-      
-      if (await downloadDir.exists()) {
-        await downloadDir.delete(recursive: true);
-        await downloadDir.create(recursive: true);
-      }
-      
-      await _prefsCache.setString(_downloadedSongsKey, '[]');
-      Logger.success('清空所有下载', 'Download');
-      return true;
-    } catch (e) {
-      Logger.error('清空失败', e, null, 'Download');
-      return false;
-    }
-  }
-
-  /// 获取下载文件总大小
   Future<int> getDownloadedSize() async {
     try {
       final downloadDir = await _getDownloadDirectory();
       int totalSize = 0;
-      
-      if (await downloadDir.exists()) {
-        await for (var entity in downloadDir.list(recursive: true)) {
+
+      if (downloadDir.existsSync()) {
+        await for (final entity in downloadDir.list(recursive: true)) {
           if (entity is File) {
-            totalSize += await entity.length();
+            totalSize += entity.lengthSync();
           }
         }
       }
-      
+
       return totalSize;
     } catch (e) {
       Logger.error('获取大小失败', e, null, 'Download');
@@ -395,12 +389,55 @@ class DownloadService {
     }
   }
 
-  /// 清理文件名中的非法字符
-  String _sanitizeFileName(String fileName) {
-    // 移除或替换非法字符
-    return fileName
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'\s+'), '_')
-        .trim();
+  /// 迁移下载记录中的路径，将旧内部存储路径替换为新外部存储路径
+  /// 在 StoragePathManager.migrateDownloadsIfNeeded() 之后调用
+  Future<void> migratePathsIfNeeded(String oldDirPath, String newDirPath) async {
+    await _synchronized(() async {
+      try {
+        final downloaded = await getDownloadedSongs();
+        bool hasChanges = false;
+
+        for (int i = 0; i < downloaded.length; i++) {
+          final song = downloaded[i];
+          String? newAudioPath;
+          String? newCoverPath;
+          String? newLyricsPath;
+          String? newTransPath;
+
+          if (song.localAudioPath.startsWith(oldDirPath)) {
+            newAudioPath = song.localAudioPath.replaceFirst(oldDirPath, newDirPath);
+          }
+          if (song.localCoverPath != null && song.localCoverPath!.startsWith(oldDirPath)) {
+            newCoverPath = song.localCoverPath!.replaceFirst(oldDirPath, newDirPath);
+          }
+          if (song.localLyricsPath != null && song.localLyricsPath!.startsWith(oldDirPath)) {
+            newLyricsPath = song.localLyricsPath!.replaceFirst(oldDirPath, newDirPath);
+          }
+          if (song.localTransPath != null && song.localTransPath!.startsWith(oldDirPath)) {
+            newTransPath = song.localTransPath!.replaceFirst(oldDirPath, newDirPath);
+          }
+
+          if (newAudioPath != null || newCoverPath != null || newLyricsPath != null || newTransPath != null) {
+            downloaded[i] = song.copyWith(
+              localAudioPath: newAudioPath,
+              localCoverPath: newCoverPath,
+              localLyricsPath: newLyricsPath,
+              localTransPath: newTransPath,
+            );
+            hasChanges = true;
+          }
+        }
+
+        if (hasChanges) {
+          final jsonList = downloaded.map((s) => s.toJson()).toList();
+          await _prefsCache.setString(_downloadedSongsKey, jsonEncode(jsonList));
+          _cachedDownloadedSongs = downloaded;
+          Logger.success('已更新 ${downloaded.length} 条下载记录的路径', 'Download');
+        }
+      } catch (e) {
+        Logger.error('迁移下载记录路径失败', e, null, 'Download');
+      }
+    });
   }
+
 }

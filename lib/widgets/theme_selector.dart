@@ -46,7 +46,6 @@ class ThemeSelector extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4,
-              childAspectRatio: 1,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),
@@ -82,72 +81,9 @@ class _ThemeCard extends StatelessWidget {
     required this.onTap,
   });
 
-  ThemeColors _getPreviewColors() {
-    switch (theme) {
-      case AppThemeMode.dark:
-        return ThemeColors.dark;
-      case AppThemeMode.light:
-        return ThemeColors.light;
-      case AppThemeMode.purple:
-        return ThemeColors.purple;
-      case AppThemeMode.blue:
-        return ThemeColors.blue;
-      case AppThemeMode.pink:
-        return ThemeColors.pink;
-      case AppThemeMode.orange:
-        return ThemeColors.orange;
-      case AppThemeMode.green:
-        return ThemeColors.green;
-      case AppThemeMode.rainbow:
-        return ThemeColors.rainbow;
-    }
-  }
-
-  String _getThemeName() {
-    switch (theme) {
-      case AppThemeMode.dark:
-        return '深色';
-      case AppThemeMode.light:
-        return '浅色';
-      case AppThemeMode.purple:
-        return '紫色';
-      case AppThemeMode.blue:
-        return '蓝色';
-      case AppThemeMode.pink:
-        return '粉色';
-      case AppThemeMode.orange:
-        return '橙色';
-      case AppThemeMode.green:
-        return '绿色';
-      case AppThemeMode.rainbow:
-        return '彩虹';
-    }
-  }
-
-  String _getThemeIcon() {
-    switch (theme) {
-      case AppThemeMode.dark:
-        return '🌙';
-      case AppThemeMode.light:
-        return '☀️';
-      case AppThemeMode.purple:
-        return '💜';
-      case AppThemeMode.blue:
-        return '💙';
-      case AppThemeMode.pink:
-        return '🌸';
-      case AppThemeMode.orange:
-        return '🍊';
-      case AppThemeMode.green:
-        return '🌿';
-      case AppThemeMode.rainbow:
-        return '🌈';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final previewColors = _getPreviewColors();
+    final previewColors = theme.colors;
     
     return GestureDetector(
       onTap: onTap,
@@ -178,12 +114,12 @@ class _ThemeCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              _getThemeIcon(),
+              theme.icon,
               style: const TextStyle(fontSize: 32),
             ),
             const SizedBox(height: 8),
             Text(
-              _getThemeName(),
+              theme.displayName,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

@@ -15,6 +15,7 @@ android/local.properties
 android/key.properties
 android/app/**/*.keystore
 android/app/**/*.jks
+*.hprof
 
 ### iOS (not in repo but safe) ###
 ios/Pods/

@@ -1,6 +1,7 @@
 import 'package:audio_service/audio_service.dart';
-import '../utils/platform_utils.dart';
+
 import '../utils/logger.dart';
+import '../utils/platform_utils.dart';
 import 'audio_handler_service.dart';
 
 /// AudioService 管理器
@@ -15,12 +16,12 @@ class AudioServiceManager {
   MusicAudioHandler? _audioHandler;
   
   /// 设置 AudioHandler 实例
-  void setAudioHandler(MusicAudioHandler handler) {
+  set audioHandler(MusicAudioHandler handler) {
     _audioHandler = handler;
   }
   
   /// 获取当前的 AudioHandler
-  MusicAudioHandler? get audioHandler {
+  MusicAudioHandler? get currentAudioHandler {
     if (PlatformUtils.isDesktop) return null;
     return _audioHandler;
   }
@@ -32,12 +33,17 @@ class AudioServiceManager {
   
   /// 更新媒体项
   void updateMediaItem(MediaItem mediaItem) {
-    final handler = audioHandler;
+    final handler = currentAudioHandler;
     if (handler != null) {
       Logger.debug('🎵 通过 AudioHandler 更新媒体项: ${mediaItem.title}', 'AudioServiceManager');
       handler.updateCurrentMediaItem(mediaItem);
     } else {
       Logger.warning('⚠️ AudioHandler 为空，无法更新媒体项', 'AudioServiceManager');
     }
+  }
+
+  Future<void> dispose() async {
+    await _audioHandler?.dispose();
+    _audioHandler = null;
   }
 }

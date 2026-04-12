@@ -1,19 +1,22 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../utils/logger.dart';
 import 'package:provider/provider.dart';
+
 import '../models/playlist.dart';
 import '../models/song.dart';
+import '../providers/favorite_provider.dart';
 import '../providers/music_provider.dart';
-import '../theme/app_styles.dart';
 import '../providers/theme_provider.dart';
-import '../services/music_api_service.dart';
 import '../services/data_cache_service.dart';
 import '../services/download_manager.dart';
+import '../services/music_api_service.dart';
+import '../theme/app_styles.dart';
+import '../utils/logger.dart';
 import '../widgets/mini_player.dart';
 import 'download_progress_screen.dart';
-import 'playlist/playlist_songs_section.dart';
 import 'playlist/playlist_header.dart';
+import 'playlist/playlist_songs_section.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
   final Playlist playlist;
@@ -21,10 +24,7 @@ class PlaylistDetailScreen extends StatefulWidget {
   final String qqNumber;
 
   const PlaylistDetailScreen({
-    super.key,
-    required this.playlist,
-    required this.totalCount,
-    required this.qqNumber,
+    required this.playlist, required this.totalCount, required this.qqNumber, super.key,
   });
 
   @override
@@ -113,7 +113,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         timer.cancel();
         return;
       }
-      _loadMoreSongs();
+      unawaited(_loadMoreSongs());
     });
   }
   
@@ -162,12 +162,12 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
       if (!_isLoadingMore && _hasMoreData) {
-        _loadMoreSongs();
+        unawaited(_loadMoreSongs());
       }
     }
   }
 
-  void _loadMoreSongs() async {
+  Future<void> _loadMoreSongs() async {
     if (_isLoadingMore || !_hasMoreData) return;
 
     // 🔧 修复:检查是否已经加载完所有歌曲
@@ -229,7 +229,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         });
 
         // 保存到缓存 (每次加载后更新)
-        _cacheService.savePlaylistDetail(widget.playlist.id, _allSongs, _totalCount);
+        unawaited(_cacheService.savePlaylistDetail(widget.playlist.id, _allSongs, _totalCount));
         
         // 🔧 修复播放列表同步问题：如果当前正在播放这个歌单的歌曲，更新播放列表
         _updatePlaylistIfPlaying();
@@ -427,9 +427,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.clear, color: colors.textSecondary),
-                          onPressed: () {
-                            _searchController.clear();
-                          },
+                          onPressed: _searchController.clear,
                         )
                       : null,
                   filled: true,
@@ -491,7 +489,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                 }
               });
             },
-            onMenuAction: (ctx, action, song) => _handleMenuAction(ctx, action, song),
+            onMenuAction: _handleMenuAction,
           ),
               ],
             ),
@@ -546,12 +544,13 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     if (selectedSongs.isEmpty) return;
 
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
     int successCount = 0;
 
     for (final song in selectedSongs) {
-      final isFavorite = musicProvider.isFavorite(song.id);
+      final isFavorite = favoriteProvider.isFavorite(song.id);
       if (!isFavorite) {
-        final success = await musicProvider.toggleFavorite(song.id);
+        final success = await favoriteProvider.toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
         if (success) successCount++;
       }
     }
@@ -606,7 +605,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
+              MaterialPageRoute<void>(
                 builder: (context) => const DownloadProgressScreen(),
               ),
             );
@@ -619,26 +618,27 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   /// 处理单曲菜单操作
   Future<void> _handleMenuAction(BuildContext context, String action, Song song) async {
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+    final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     
     switch (action) {
       case 'favorite':
-        await musicProvider.toggleFavorite(song.id);
+        await favoriteProvider.toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
         if (!mounted) return;
         messenger.showSnackBar(
           SnackBar(
             content: Row(
               children: [
                 Icon(
-                  musicProvider.isFavorite(song.id) ? Icons.favorite : Icons.favorite_border,
+                  favoriteProvider.isFavorite(song.id) ? Icons.favorite : Icons.favorite_border,
                   color: Colors.white,
                   size: 20,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    musicProvider.isFavorite(song.id)
+                    favoriteProvider.isFavorite(song.id)
                         ? '已添加到我喜欢'
                         : '已从我喜欢中移除',
                     style: const TextStyle(fontSize: 14),
@@ -648,7 +648,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             ),
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
-            backgroundColor: musicProvider.isFavorite(song.id)
+            backgroundColor: favoriteProvider.isFavorite(song.id)
                 ? Colors.red.shade700
                 : Colors.grey.shade700,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -689,7 +689,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                 textColor: Colors.white,
                 onPressed: () {
                   navigator.push(
-                    MaterialPageRoute(
+                    MaterialPageRoute<void>(
                       builder: (context) => const DownloadProgressScreen(),
                     ),
                   );
@@ -723,7 +723,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         break;
         
       case 'play':
-        musicProvider.playSong(song, playlist: _allSongs);
+        unawaited(musicProvider.playSong(song, playlist: _allSongs));
         break;
     }
   }

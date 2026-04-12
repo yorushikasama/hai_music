@@ -1,13 +1,14 @@
-/// 播放历史记录模型
+import '../utils/format_utils.dart';
+
 class PlayHistory {
-  final String id; // 歌曲ID
+  final String id;
   final String title;
   final String artist;
   final String album;
   final String coverUrl;
-  final int? duration; // 时长（秒）
+  final int? duration;
   final String? platform;
-  final DateTime playedAt; // 播放时间
+  final DateTime playedAt;
 
   PlayHistory({
     required this.id,
@@ -22,15 +23,15 @@ class PlayHistory {
 
   factory PlayHistory.fromJson(Map<String, dynamic> json) {
     return PlayHistory(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      artist: json['artist'] ?? '',
-      album: json['album'] ?? '',
-      coverUrl: json['coverUrl'] ?? '',
-      duration: json['duration'] ?? 0,
-      platform: json['platform'],
-      playedAt: json['playedAt'] != null 
-          ? DateTime.parse(json['playedAt']) 
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      artist: json['artist']?.toString() ?? '',
+      album: json['album']?.toString() ?? '',
+      coverUrl: json['coverUrl']?.toString() ?? '',
+      duration: FormatUtils.parseIntSafe(json['duration']),
+      platform: json['platform']?.toString(),
+      playedAt: json['playedAt'] != null
+          ? DateTime.tryParse(json['playedAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
     );
   }

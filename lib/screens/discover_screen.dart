@@ -1,21 +1,24 @@
+import 'dart:async';
 import 'dart:math';
-import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
-import 'package:provider/provider.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/song.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../models/playlist.dart';
+import '../models/song.dart';
 import '../providers/theme_provider.dart';
-import '../theme/app_styles.dart';
-import '../utils/responsive.dart';
-import '../utils/platform_utils.dart';
+import '../services/data_cache_service.dart';
 import '../services/music_api_service.dart';
 import '../services/playlist_scraper_service.dart';
-import '../services/data_cache_service.dart';
+import '../theme/app_styles.dart';
 import '../utils/logger.dart';
-import 'playlist_detail_screen.dart';
-import 'discover/discover_header.dart';
+import '../utils/platform_utils.dart';
+import '../utils/responsive.dart';
 import 'discover/daily_recommendations_section.dart';
+import 'discover/discover_header.dart';
+import 'playlist_detail_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -44,7 +47,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   /// 初始化缓存服务
   Future<void> _initCache() async {
     await _cacheService.init();
-    _loadRecommendedPlaylists();
+    unawaited(_loadRecommendedPlaylists());
   }
 
   @override
@@ -110,7 +113,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final futures = selectedPlaylists.map((playlist) =>
         _apiService.getPlaylistSongs(
           playlistId: playlist.id,
-          page: 1,
           num: 30,
         ).then((result) => result['songs'] as List<Song>)
          .timeout(
@@ -120,7 +122,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             return <Song>[];
           },
         )
-         .catchError((e) {
+         .catchError((Object e) {
           Logger.error('从API加载推荐歌单失败', e, null, 'DiscoverScreen');
           return <Song>[];
         })
@@ -194,7 +196,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             _isLoadingPlaylists = false;
           });
           // 加载每日推荐
-          _loadDailyRecommendations();
+          unawaited(_loadDailyRecommendations());
         }
         return;
       }
@@ -218,7 +220,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             _isLoadingPlaylists = false;
           });
           // 加载每日推荐
-          _loadDailyRecommendations();
+          unawaited(_loadDailyRecommendations());
         }
       } else {
         // 爬取失败,尝试使用旧缓存 (30天内)
@@ -229,7 +231,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               _recommendedPlaylists = oldCache;
               _isLoadingPlaylists = false;
             });
-            _loadDailyRecommendations();
+            unawaited(_loadDailyRecommendations());
           }
         } else {
           if (mounted) {
@@ -303,7 +305,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   icon: Icon(Icons.refresh, color: colors.accent),
                   onPressed: () async {
                     await _cacheService.clearRecommendedPlaylists();
-                    _loadRecommendedPlaylists();
+                    unawaited(_loadRecommendedPlaylists());
                   },
                   tooltip: '刷新推荐',
                 ),
@@ -459,7 +461,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       child: GestureDetector(
         onTap: () async {
           // 显示加载对话框
-          showDialog(
+          unawaited(showDialog<void>(
             context: context,
             barrierDismissible: false,
             builder: (context) => Center(
@@ -482,7 +484,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ),
               ),
             ),
-          );
+          ));
 
           // 在异步操作前提取 context 相关对象
           final navigator = Navigator.of(context);
@@ -494,8 +496,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             // 直接获取歌单歌曲（第一页）
             final result = await _apiService.getPlaylistSongs(
               playlistId: playlist.id,
-              page: 1,
-              num: 60,
             );
             
             Logger.debug('📊 歌单API返回结果: ${result.keys.toList()}', 'DiscoverScreen');
@@ -518,15 +518,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             navigator.pop(); // 关闭加载对话框
 
             // 跳转到歌单详情页
-            navigator.push(
-              MaterialPageRoute(
+            unawaited(navigator.push(
+              MaterialPageRoute<void>(
                 builder: (context) => PlaylistDetailScreen(
                   playlist: playlistObj,
                   totalCount: totalCount,
-                  qqNumber: '', // 推荐歌单不需要QQ号
+                  qqNumber: '',
                 ),
               ),
-            );
+            ));
           } catch (e) {
             Logger.error('❌ 歌单加载失败: ${playlist.title} (ID: ${playlist.id})', e, null, 'DiscoverScreen');
             
@@ -605,7 +605,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: null, // 由外层GestureDetector处理
                           child: Container(
                             decoration: BoxDecoration(
                             gradient: LinearGradient(

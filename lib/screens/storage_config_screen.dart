@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../models/storage_config.dart';
-import '../providers/music_provider.dart';
+import '../providers/favorite_provider.dart';
 import '../providers/theme_provider.dart';
-import '../theme/app_styles.dart';
 import '../services/clipboard_config_parser.dart';
+import '../theme/app_styles.dart';
 import '../widgets/draggable_window_area.dart';
 
 /// 存储配置界面
@@ -52,9 +54,9 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
     _r2CustomDomainController = TextEditingController();
   }
 
-  void _loadConfig() {
-    final musicProvider = Provider.of<MusicProvider>(context, listen: false);
-    final config = musicProvider.favoriteManager.getConfig();
+  Future<void> _loadConfig() async {
+    final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
+    final config = await favoriteProvider.favoriteManager.getConfigAsync();
     
     setState(() {
       _supabaseUrlController.text = config.supabaseUrl;
@@ -122,7 +124,9 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
         return;
       }
 
-      // 填充到输入框
+      final confirmed = await _showImportConfirmDialog(config);
+      if (confirmed != true) return;
+
       setState(() {
         _supabaseUrlController.text = config.supabaseUrl;
         _supabaseKeyController.text = config.supabaseAnonKey;
@@ -155,7 +159,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
   }
 
   void _showImportHelpDialog() {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('配置格式说明'),
@@ -169,6 +173,41 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _showImportConfirmDialog(StorageConfig config) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认导入配置'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('将从剪贴板导入以下配置：'),
+            const SizedBox(height: 12),
+            Text('Supabase URL: ${config.supabaseUrl}', style: const TextStyle(fontSize: 13)),
+            Text('R2 Endpoint: ${config.r2Endpoint}', style: const TextStyle(fontSize: 13)),
+            Text('Bucket: ${config.r2BucketName}', style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            const Text(
+              '⚠️ 请确认配置来源可信，错误的配置可能导致数据异常。',
+              style: TextStyle(fontSize: 12, color: Colors.orange),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认导入'),
           ),
         ],
       ),
@@ -198,17 +237,19 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
         enableSync: _enableSync,
       );
 
-      final musicProvider = Provider.of<MusicProvider>(context, listen: false);
+      final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
       
-      // 保存配置
-      final success = await musicProvider.favoriteManager.updateConfig(config);
+      final success = await favoriteProvider.favoriteManager.updateConfig(config);
 
       if (!mounted) return;
 
       setState(() => _isLoading = false);
 
       if (success) {
-        // 保存成功，显示成功提示并返回
+        if (_enableSync) {
+          await favoriteProvider.refreshFavoriteSongs();
+        }
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Row(
@@ -224,7 +265,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
         );
         
         // 延迟一下再返回，让用户看到成功提示
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future<void>.delayed(const Duration(milliseconds: 500));
         if (mounted) {
           Navigator.pop(context);
         }
@@ -263,7 +304,6 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
             ],
           ),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -330,11 +370,11 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.all(AppStyles.spacingL),
+          padding: const EdgeInsets.all(AppStyles.spacingL),
           children: [
             // 启用同步开关
             Container(
-              padding: EdgeInsets.all(AppStyles.spacingM),
+              padding: const EdgeInsets.all(AppStyles.spacingM),
               decoration: AppStyles.glassDecoration(
                 color: colors.surface,
                 opacity: 0.8,
@@ -364,11 +404,11 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 },
               ),
             ),
-            SizedBox(height: AppStyles.spacingL),
+            const SizedBox(height: AppStyles.spacingL),
 
             // Supabase 配置
             _buildSectionTitle('Supabase 数据库配置', colors),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _supabaseUrlController,
               label: 'Supabase URL',
@@ -381,7 +421,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 return null;
               },
             ),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _supabaseKeyController,
               label: 'Supabase Anon Key',
@@ -404,11 +444,11 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 return null;
               },
             ),
-            SizedBox(height: AppStyles.spacingXL),
+            const SizedBox(height: AppStyles.spacingXL),
 
             // Cloudflare R2 配置
             _buildSectionTitle('Cloudflare R2 存储配置', colors),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _r2EndpointController,
               label: 'R2 Endpoint',
@@ -421,7 +461,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 return null;
               },
             ),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _r2AccessKeyController,
               label: 'Access Key ID',
@@ -444,7 +484,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 return null;
               },
             ),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _r2SecretKeyController,
               label: 'Secret Access Key',
@@ -467,7 +507,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 return null;
               },
             ),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _r2BucketController,
               label: 'Bucket 名称',
@@ -480,14 +520,14 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
                 return null;
               },
             ),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _r2RegionController,
               label: 'Region',
               hint: 'auto',
               colors: colors,
             ),
-            SizedBox(height: AppStyles.spacingM),
+            const SizedBox(height: AppStyles.spacingM),
             _buildTextField(
               controller: _r2CustomDomainController,
               label: 'R2 自定义域名（可选）',
@@ -495,7 +535,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
               colors: colors,
               helperText: '在 Cloudflare R2 控制台绑定自定义域名后填写\n使用自定义域名可获得永久有效的 URL',
             ),
-            SizedBox(height: AppStyles.spacingXL),
+            const SizedBox(height: AppStyles.spacingXL),
 
             // 说明文档
             _buildInfoCard(colors),
@@ -554,7 +594,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
           ),
           filled: true,
           fillColor: Colors.transparent,
-          contentPadding: EdgeInsets.all(AppStyles.spacingM),
+          contentPadding: const EdgeInsets.all(AppStyles.spacingM),
           suffixIcon: suffixIcon,
         ),
         validator: validator,
@@ -564,7 +604,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
 
   Widget _buildInfoCard(ThemeColors colors) {
     return Container(
-      padding: EdgeInsets.all(AppStyles.spacingM),
+      padding: const EdgeInsets.all(AppStyles.spacingM),
       decoration: AppStyles.glassDecoration(
         color: colors.accent,
         opacity: 0.1,
@@ -577,7 +617,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
           Row(
             children: [
               Icon(Icons.info_outline, color: colors.accent, size: 20),
-              SizedBox(width: AppStyles.spacingS),
+              const SizedBox(width: AppStyles.spacingS),
               Text(
                 '配置说明',
                 style: TextStyle(
@@ -588,7 +628,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
               ),
             ],
           ),
-          SizedBox(height: AppStyles.spacingM),
+          const SizedBox(height: AppStyles.spacingM),
           Text(
             '1. 在 Supabase 中创建项目并获取 URL 和 Anon Key\n'
             '2. 创建 favorite_songs 表（参考服务代码中的建议结构）\n'

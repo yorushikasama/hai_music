@@ -1,7 +1,9 @@
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
-import '../models/song.dart';
+
 import '../models/play_mode.dart';
+import '../models/song.dart';
 import '../utils/logger.dart';
 
 /// 播放列表管理服务
@@ -46,13 +48,6 @@ class PlaylistManagerService extends ChangeNotifier {
     notifyListeners();
   }
   
-  /// 添加多首歌曲到播放列表
-  void addSongs(List<Song> songs) {
-    _playlist.addAll(songs);
-    Logger.info('添加 ${songs.length} 首歌曲到播放列表', 'PlaylistManager');
-    notifyListeners();
-  }
-  
   /// 更新整个播放列表（保持当前播放位置）
   void updatePlaylist(List<Song> songs, int newCurrentIndex) {
     _playlist.clear();
@@ -61,21 +56,6 @@ class PlaylistManagerService extends ChangeNotifier {
     
     Logger.info('更新播放列表: ${songs.length} 首歌曲，当前索引: $_currentIndex', 'PlaylistManager');
     notifyListeners();
-  }
-  
-  /// 插入歌曲到指定位置
-  void insertSong(int index, Song song) {
-    if (index >= 0 && index <= _playlist.length) {
-      _playlist.insert(index, song);
-      
-      // 调整当前索引
-      if (index <= _currentIndex) {
-        _currentIndex++;
-      }
-      
-      Logger.info('在位置 $index 插入歌曲: ${song.title}', 'PlaylistManager');
-      notifyListeners();
-    }
   }
   
   /// 移除指定位置的歌曲
@@ -92,14 +72,6 @@ class PlaylistManagerService extends ChangeNotifier {
       
       Logger.info('移除歌曲: ${song.title}', 'PlaylistManager');
       notifyListeners();
-    }
-  }
-  
-  /// 移除歌曲
-  void removeSong(Song song) {
-    final index = _playlist.indexWhere((s) => s.id == song.id);
-    if (index >= 0) {
-      removeSongAt(index);
     }
   }
   
@@ -252,18 +224,27 @@ class PlaylistManagerService extends ChangeNotifier {
   /// 获取随机索引（避免重复）
   int _getRandomIndex() {
     if (_playlist.length <= 1) return 0;
-    
+
+    final availableIndices = <int>[];
+    for (int i = 0; i < _playlist.length; i++) {
+      if (i != _currentIndex && !_shuffleHistory.contains(i)) {
+        availableIndices.add(i);
+      }
+    }
+
+    if (availableIndices.isEmpty) {
+      _shuffleHistory.clear();
+      for (int i = 0; i < _playlist.length; i++) {
+        if (i != _currentIndex) {
+          availableIndices.add(i);
+        }
+      }
+    }
+
+    if (availableIndices.isEmpty) return 0;
+
     final random = Random();
-    int nextIndex;
-    int attempts = 0;
-    const maxAttempts = 10;
-    
-    do {
-      nextIndex = random.nextInt(_playlist.length);
-      attempts++;
-    } while (attempts < maxAttempts && 
-             (nextIndex == _currentIndex || _shuffleHistory.contains(nextIndex)));
-    
+    final nextIndex = availableIndices[random.nextInt(availableIndices.length)];
     _addToShuffleHistory(nextIndex);
     return nextIndex;
   }
@@ -276,16 +257,6 @@ class PlaylistManagerService extends ChangeNotifier {
     while (_shuffleHistory.length > _maxShuffleHistory) {
       _shuffleHistory.removeAt(0);
     }
-  }
-  
-  /// 查找歌曲索引
-  int findSongIndex(String songId) {
-    return _playlist.indexWhere((song) => song.id == songId);
-  }
-  
-  /// 检查歌曲是否在播放列表中
-  bool containsSong(String songId) {
-    return findSongIndex(songId) >= 0;
   }
   
   /// 获取播放列表信息

@@ -1,65 +1,26 @@
 import 'package:flutter/material.dart';
+
+import '../services/preferences_service.dart';
 import '../theme/app_styles.dart';
-import '../services/preferences_cache_service.dart';
+import '../utils/logger.dart';
 
 enum AppThemeMode {
-  dark,
-  light,
-  purple,
-  blue,
-  pink,
-  orange,
-  green,
-  rainbow,
-}
+  dark(displayName: '深色', icon: '🌙'),
+  light(displayName: '浅色', icon: '☀️'),
+  purple(displayName: '紫色', icon: '💜'),
+  blue(displayName: '蓝色', icon: '💙'),
+  pink(displayName: '粉色', icon: '🌸'),
+  orange(displayName: '橙色', icon: '🍊'),
+  green(displayName: '绿色', icon: '🌿'),
+  rainbow(displayName: '彩虹', icon: '🌈');
 
-class ThemeProvider extends ChangeNotifier {
-  AppThemeMode _currentTheme = AppThemeMode.dark;
-  static const String _themeKey = 'app_theme';
+  final String displayName;
+  final String icon;
 
-  AppThemeMode get currentTheme => _currentTheme;
-  ThemeColors get colors => _getColors();
-  String get themeName => _getThemeName();
+  const AppThemeMode({required this.displayName, required this.icon});
 
-  /// 初始化时加载保存的主题
-  Future<void> loadTheme() async {
-    try {
-      final prefsCache = PreferencesCacheService();
-      await prefsCache.init();
-      final themeIndex = await prefsCache.getInt(_themeKey);
-      if (themeIndex != null && themeIndex < AppThemeMode.values.length) {
-        _currentTheme = AppThemeMode.values[themeIndex];
-        notifyListeners();
-      }
-    } catch (e) {
-      // 使用默认主题
-    }
-  }
-
-  /// 设置主题并保存
-  Future<void> setTheme(AppThemeMode theme) async {
-    _currentTheme = theme;
-    notifyListeners();
-
-    // 保存到本地
-    try {
-      final prefsCache = PreferencesCacheService();
-      await prefsCache.init();
-      await prefsCache.setInt(_themeKey, theme.index);
-    } catch (e) {
-      // 忽略保存错误
-    }
-  }
-
-  void nextTheme() {
-    const themes = AppThemeMode.values;
-    final currentIndex = themes.indexOf(_currentTheme);
-    final nextIndex = (currentIndex + 1) % themes.length;
-    setTheme(themes[nextIndex]);
-  }
-
-  ThemeColors _getColors() {
-    switch (_currentTheme) {
+  ThemeColors get colors {
+    switch (this) {
       case AppThemeMode.dark:
         return ThemeColors.dark;
       case AppThemeMode.light:
@@ -78,55 +39,72 @@ class ThemeProvider extends ChangeNotifier {
         return ThemeColors.rainbow;
     }
   }
+}
 
-  String _getThemeName() {
-    switch (_currentTheme) {
-      case AppThemeMode.dark:
-        return '深色';
-      case AppThemeMode.light:
-        return '浅色';
-      case AppThemeMode.purple:
-        return '紫色';
-      case AppThemeMode.blue:
-        return '蓝色';
-      case AppThemeMode.pink:
-        return '粉色';
-      case AppThemeMode.orange:
-        return '橙色';
-      case AppThemeMode.green:
-        return '绿色';
-      case AppThemeMode.rainbow:
-        return '彩虹';
+class ThemeProvider extends ChangeNotifier {
+  AppThemeMode _currentTheme = AppThemeMode.dark;
+  ThemeData? _cachedThemeData;
+  static const String _themeKey = 'app_theme';
+
+  AppThemeMode get currentTheme => _currentTheme;
+  ThemeColors get colors => _currentTheme.colors;
+  String get themeName => _currentTheme.displayName;
+
+  /// 初始化时加载保存的主题
+  Future<void> loadTheme() async {
+    try {
+      final prefs = PreferencesService();
+      final themeName = await prefs.getString(_themeKey);
+      if (themeName != null) {
+        final theme = AppThemeMode.values.where((t) => t.name == themeName).firstOrNull;
+        if (theme != null) {
+          _currentTheme = theme;
+          _cachedThemeData = null;
+          notifyListeners();
+        }
+      } else {
+        final themeIndex = await prefs.getInt(_themeKey);
+        if (themeIndex != null && themeIndex < AppThemeMode.values.length) {
+          _currentTheme = AppThemeMode.values[themeIndex];
+          _cachedThemeData = null;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      Logger.warning('加载主题设置失败，使用默认主题', 'ThemeProvider');
     }
   }
 
-  String getThemeIcon(AppThemeMode theme) {
-    switch (theme) {
-      case AppThemeMode.dark:
-        return '🌙';
-      case AppThemeMode.light:
-        return '☀️';
-      case AppThemeMode.purple:
-        return '💜';
-      case AppThemeMode.blue:
-        return '💙';
-      case AppThemeMode.pink:
-        return '🌸';
-      case AppThemeMode.orange:
-        return '🍊';
-      case AppThemeMode.green:
-        return '🌿';
-      case AppThemeMode.rainbow:
-        return '🌈';
+  /// 设置主题并保存
+  Future<void> setTheme(AppThemeMode theme) async {
+    _currentTheme = theme;
+    _cachedThemeData = null;
+    notifyListeners();
+
+    try {
+      final prefs = PreferencesService();
+      await prefs.setString(_themeKey, theme.name);
+    } catch (e) {
+      Logger.warning('保存主题设置失败', 'ThemeProvider');
     }
   }
 
-  // 生成完整的 ThemeData
+  void nextTheme() {
+    const themes = AppThemeMode.values;
+    final currentIndex = themes.indexOf(_currentTheme);
+    final nextIndex = (currentIndex + 1) % themes.length;
+    setTheme(themes[nextIndex]);
+  }
+
+  String getThemeIcon(AppThemeMode theme) => theme.icon;
+
   ThemeData get themeData {
+    if (_cachedThemeData != null) return _cachedThemeData!;
+
     final c = colors;
     final isLight = c.isLight;
 
-    return ThemeData(
+    final result = ThemeData(
       useMaterial3: true,
       brightness: isLight ? Brightness.light : Brightness.dark,
       scaffoldBackgroundColor: Colors.transparent,
@@ -195,5 +173,14 @@ class ThemeProvider extends ChangeNotifier {
         ),
       ),
     );
+
+    _cachedThemeData = result;
+    return result;
+  }
+
+  @override
+  void dispose() {
+    Logger.info('释放 ThemeProvider 资源', 'ThemeProvider');
+    super.dispose();
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/song.dart';
+import '../../providers/favorite_provider.dart';
 import '../../providers/music_provider.dart';
 import '../../providers/theme_provider.dart';
 
@@ -18,16 +19,7 @@ class PlaylistSongsSection extends StatelessWidget {
   final Future<void> Function(BuildContext context, String action, Song song) onMenuAction;
 
   const PlaylistSongsSection({
-    super.key,
-    required this.songs,
-    required this.isSelectionMode,
-    required this.selectedIds,
-    required this.isLoadingMore,
-    required this.hasMoreData,
-    required this.totalCount,
-    required this.onSongTap,
-    required this.onSelectionChanged,
-    required this.onMenuAction,
+    required this.songs, required this.isSelectionMode, required this.selectedIds, required this.isLoadingMore, required this.hasMoreData, required this.totalCount, required this.onSongTap, required this.onSelectionChanged, required this.onMenuAction, super.key,
   });
 
   @override
@@ -150,7 +142,7 @@ class _PlaylistSongTile extends StatelessWidget {
                   Checkbox(
                     value: isSelected,
                     onChanged: (value) {
-                      onSelectionChanged(song, value == true);
+                      onSelectionChanged(song, value ?? false);
                     },
                     activeColor: colors.accent,
                   )
@@ -217,9 +209,9 @@ class _PlaylistSongTile extends StatelessWidget {
                     itemBuilder: (context) => [
                       PopupMenuItem<String>(
                         value: 'favorite',
-                        child: Consumer<MusicProvider>(
-                          builder: (context, musicProvider, child) {
-                            final isFavorite = musicProvider.isFavorite(song.id);
+                        child: Consumer<FavoriteProvider>(
+                          builder: (context, favoriteProvider, child) {
+                            final isFavorite = favoriteProvider.isFavorite(song.id);
                             return Row(
                               children: [
                                 Icon(

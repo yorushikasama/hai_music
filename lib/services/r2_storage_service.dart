@@ -37,7 +37,6 @@ class R2StorageService {
         endPoint: endpoint,
         accessKey: config.r2AccessKey,
         secretKey: config.r2SecretKey,
-        useSSL: true,
         region: config.r2Region,
       );
 
@@ -90,8 +89,8 @@ class R2StorageService {
     }
 
     try {
-      final fileStream = file.openRead().map((chunk) => Uint8List.fromList(chunk));
-      final fileSize = await file.length();
+      final fileStream = file.openRead().map(Uint8List.fromList);
+      final fileSize = file.lengthSync();
 
       Logger.info('上传文件到 R2: $objectName (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)', 'R2Storage');
 
@@ -128,17 +127,17 @@ class R2StorageService {
   }
 
   /// 上传音频文件
-  Future<String?> uploadAudio(File audioFile, String songId) async {
+  Future<String?> uploadAudio(File audioFile, String songId) {
     final ext = path.extension(audioFile.path);
     final objectName = 'audio/$songId$ext';
-    return await uploadFile(audioFile, objectName);
+    return uploadFile(audioFile, objectName);
   }
 
   /// 上传封面图片
-  Future<String?> uploadCover(File coverFile, String songId) async {
+  Future<String?> uploadCover(File coverFile, String songId) {
     final ext = path.extension(coverFile.path);
     final objectName = 'covers/$songId$ext';
-    return await uploadFile(coverFile, objectName);
+    return uploadFile(coverFile, objectName);
   }
 
   /// 下载文件
@@ -151,7 +150,7 @@ class R2StorageService {
     try {
       final stream = await _client!.getObject(_bucketName!, objectName);
       final file = File(savePath);
-      await file.create(recursive: true);
+      file.createSync(recursive: true);
       
       final sink = file.openWrite();
       await stream.pipe(sink);
@@ -240,8 +239,9 @@ class R2StorageService {
     
     // 尝试使用 R2.dev 格式
     if (endpoint.contains('r2.cloudflarestorage.com')) {
-      final accountId = endpoint.split('.')[0];
-      return 'https://$_bucketName.$accountId.r2.dev/$objectName';
+      final parts = endpoint.split('.');
+      final accountIdHash = parts.isNotEmpty ? parts[0] : '';
+      return 'https://$_bucketName.$accountIdHash.r2.dev/$objectName';
     }
     
     // 回退到标准 S3 格式（需要公开访问权限）

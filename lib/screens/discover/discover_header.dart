@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/theme_provider.dart';
-import '../../utils/responsive.dart';
 import '../../utils/platform_utils.dart';
-import '../../widgets/theme_selector.dart';
+import '../../utils/responsive.dart';
 import '../../widgets/draggable_window_area.dart';
+import '../../widgets/theme_selector.dart';
 
 /// 发现页顶部标题栏 SliverAppBar
 class DiscoverHeader extends StatelessWidget {
@@ -19,7 +19,6 @@ class DiscoverHeader extends StatelessWidget {
 
     return SliverAppBar(
       floating: true,
-      pinned: false,
       expandedHeight: 100,
       backgroundColor: Colors.transparent,
       flexibleSpace: Stack(
@@ -27,7 +26,7 @@ class DiscoverHeader extends StatelessWidget {
           FlexibleSpaceBar(
             title: Text(
               'Hai Music',
-              style: Theme.of(context).textTheme.headlineLarge!,
+              style: Theme.of(context).textTheme.headlineLarge,
             ),
             titlePadding: EdgeInsets.only(left: padding.left, bottom: 16),
           ),
@@ -52,7 +51,7 @@ class DiscoverHeader extends StatelessWidget {
                     style: const TextStyle(fontSize: 24),
                   ),
                   onPressed: () {
-                    showModalBottomSheet(
+                    showModalBottomSheet<void>(
                       context: context,
                       backgroundColor: Colors.transparent,
                       builder: (context) => const ThemeSelector(),

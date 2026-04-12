@@ -251,7 +251,7 @@ class DownloadProgressScreen extends StatelessWidget {
                     ),
                     Text(
                       '${(task.progress * 100).toStringAsFixed(0)}%',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.blue,
@@ -277,7 +277,7 @@ class DownloadProgressScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               task.errorMessage!,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 color: Colors.red,
               ),
@@ -346,7 +346,7 @@ class DownloadProgressScreen extends StatelessWidget {
           tooltip: '重试',
         );
       case DownloadStatus.completed:
-        return Icon(Icons.done, color: Colors.green, size: 20);
+        return const Icon(Icons.done, color: Colors.green, size: 20);
       case DownloadStatus.cancelled:
         return Icon(Icons.cancel, color: colors.textSecondary, size: 20);
     }
@@ -357,7 +357,7 @@ class DownloadProgressScreen extends StatelessWidget {
     DownloadManager manager,
     ThemeColors colors,
   ) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: colors.card,

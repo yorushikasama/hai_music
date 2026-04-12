@@ -1,19 +1,22 @@
-/// 收藏歌曲模型（用于数据库存储）
+import '../utils/format_utils.dart';
+
+const Object _sentinel = Object();
+
 class FavoriteSong {
-  final String id; // 歌曲ID
+  final String id;
   final String title;
   final String artist;
   final String album;
   final String coverUrl;
-  final String? localAudioPath; // 本地音频文件路径
-  final String? localCoverPath; // 本地封面文件路径
-  final String? r2AudioUrl; // R2存储的音频URL
-  final String? r2CoverUrl; // R2存储的封面URL
-  final int? duration; // 时长（秒）
-  final String? platform; // 来源平台
-  final String? lyricsLrc; // LRC 格式歌词
-  final DateTime createdAt; // 收藏时间
-  final DateTime? syncedAt; // 最后同步时间
+  final String? localAudioPath;
+  final String? localCoverPath;
+  final String? r2AudioUrl;
+  final String? r2CoverUrl;
+  final int? duration;
+  final String? platform;
+  final String? lyricsLrc;
+  final DateTime createdAt;
+  final DateTime? syncedAt;
 
   FavoriteSong({
     required this.id,
@@ -34,23 +37,24 @@ class FavoriteSong {
 
   factory FavoriteSong.fromJson(Map<String, dynamic> json) {
     return FavoriteSong(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      artist: json['artist'] ?? '',
-      album: json['album'] ?? '',
-      coverUrl: json['original_cover_url'] ?? json['cover_url'] ?? '',
-      localAudioPath: json['local_audio_path'],
-      localCoverPath: json['local_cover_path'],
-      r2AudioUrl: json['r2_audio_url'],
-      r2CoverUrl: json['r2_cover_url'],
-      duration: json['duration'] ?? 0,
-      platform: json['platform'],
-      lyricsLrc: json['lyrics_lrc'],
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      artist: json['artist']?.toString() ?? '',
+      album: json['album']?.toString() ?? '',
+      // 兼容不同字段名: original_cover_url > cover_url > coverUrl
+      coverUrl: (json['original_cover_url'] ?? json['cover_url'] ?? json['coverUrl'])?.toString() ?? '',
+      localAudioPath: json['local_audio_path']?.toString(),
+      localCoverPath: json['local_cover_path']?.toString(),
+      r2AudioUrl: json['r2_audio_url']?.toString(),
+      r2CoverUrl: json['r2_cover_url']?.toString(),
+      duration: FormatUtils.parseIntSafe(json['duration']),
+      platform: json['platform']?.toString(),
+      lyricsLrc: json['lyrics_lrc']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
-      syncedAt: json['synced_at'] != null 
-          ? DateTime.parse(json['synced_at']) 
+      syncedAt: json['synced_at'] != null
+          ? DateTime.tryParse(json['synced_at'].toString())
           : null,
     );
   }
@@ -66,11 +70,9 @@ class FavoriteSong {
       'local_cover_path': localCoverPath,
       'r2_audio_url': r2AudioUrl,
       'r2_cover_url': r2CoverUrl,
-      'duration': duration,
+      'duration': duration ?? 0,
       'platform': platform,
       'lyrics_lrc': lyricsLrc,
-      'sync_status': 'synced',
-      'play_count': 0,
       'created_at': createdAt.toIso8601String(),
       'synced_at': syncedAt?.toIso8601String(),
     };
@@ -82,15 +84,15 @@ class FavoriteSong {
     String? artist,
     String? album,
     String? coverUrl,
-    String? localAudioPath,
-    String? localCoverPath,
-    String? r2AudioUrl,
-    String? r2CoverUrl,
+    Object? localAudioPath = _sentinel,
+    Object? localCoverPath = _sentinel,
+    Object? r2AudioUrl = _sentinel,
+    Object? r2CoverUrl = _sentinel,
     int? duration,
-    String? platform,
-    String? lyricsLrc,
+    Object? platform = _sentinel,
+    Object? lyricsLrc = _sentinel,
     DateTime? createdAt,
-    DateTime? syncedAt,
+    Object? syncedAt = _sentinel,
   }) {
     return FavoriteSong(
       id: id ?? this.id,
@@ -98,15 +100,15 @@ class FavoriteSong {
       artist: artist ?? this.artist,
       album: album ?? this.album,
       coverUrl: coverUrl ?? this.coverUrl,
-      localAudioPath: localAudioPath ?? this.localAudioPath,
-      localCoverPath: localCoverPath ?? this.localCoverPath,
-      r2AudioUrl: r2AudioUrl ?? this.r2AudioUrl,
-      r2CoverUrl: r2CoverUrl ?? this.r2CoverUrl,
+      localAudioPath: localAudioPath == _sentinel ? this.localAudioPath : localAudioPath as String?,
+      localCoverPath: localCoverPath == _sentinel ? this.localCoverPath : localCoverPath as String?,
+      r2AudioUrl: r2AudioUrl == _sentinel ? this.r2AudioUrl : r2AudioUrl as String?,
+      r2CoverUrl: r2CoverUrl == _sentinel ? this.r2CoverUrl : r2CoverUrl as String?,
       duration: duration ?? this.duration,
-      platform: platform ?? this.platform,
-      lyricsLrc: lyricsLrc ?? this.lyricsLrc,
+      platform: platform == _sentinel ? this.platform : platform as String?,
+      lyricsLrc: lyricsLrc == _sentinel ? this.lyricsLrc : lyricsLrc as String?,
       createdAt: createdAt ?? this.createdAt,
-      syncedAt: syncedAt ?? this.syncedAt,
+      syncedAt: syncedAt == _sentinel ? this.syncedAt : syncedAt as DateTime?,
     );
   }
 }

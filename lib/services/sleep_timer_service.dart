@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../extensions/duration_extension.dart';
 import '../utils/logger.dart';
 
 /// 睡眠定时器服务
@@ -8,6 +9,7 @@ class SleepTimerService extends ChangeNotifier {
   Timer? _timer;
   Duration? _remainingTime;
   DateTime? _endTime;
+  int? _lastNotifiedMinute;
   
   /// 定时器是否激活
   bool get isActive => _timer != null && _timer!.isActive;
@@ -21,16 +23,7 @@ class SleepTimerService extends ChangeNotifier {
   /// 格式化剩余时间显示（如：15:30）
   String get formattedRemainingTime {
     if (_remainingTime == null) return '';
-    
-    final hours = _remainingTime!.inHours;
-    final minutes = _remainingTime!.inMinutes.remainder(60);
-    final seconds = _remainingTime!.inSeconds.remainder(60);
-    
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    } else {
-      return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
+    return _remainingTime!.toHoursMinutesSeconds();
   }
   
   /// 开始定时器
@@ -47,25 +40,26 @@ class SleepTimerService extends ChangeNotifier {
     
     _endTime = DateTime.now().add(duration);
     _remainingTime = duration;
+    _lastNotifiedMinute = null;
     
     Logger.info('启动睡眠定时器: ${duration.inMinutes}分钟', 'SleepTimer');
     
     // 每秒更新一次剩余时间
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _remainingTime = _endTime!.difference(DateTime.now());
-      
-      // 定时结束
+
       if (_remainingTime!.inSeconds <= 0) {
         Logger.info('睡眠定时器结束，执行回调', 'SleepTimer');
         cancel();
         onComplete();
       } else {
-        // 每分钟记录一次日志
-        if (_remainingTime!.inSeconds % 60 == 0) {
-          Logger.debug('剩余时间: ${_remainingTime!.inMinutes}分钟', 'SleepTimer');
+        final currentMinute = _remainingTime!.inMinutes;
+        if (_lastNotifiedMinute != currentMinute) {
+          _lastNotifiedMinute = currentMinute;
+          Logger.debug('剩余时间: $currentMinute分钟', 'SleepTimer');
         }
       }
-      
+
       notifyListeners();
     });
     
