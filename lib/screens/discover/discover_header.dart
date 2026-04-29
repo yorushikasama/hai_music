@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/theme_provider.dart';
+import '../../theme/app_styles.dart';
 import '../../utils/platform_utils.dart';
 import '../../utils/responsive.dart';
 import '../../widgets/draggable_window_area.dart';
@@ -44,11 +45,12 @@ class DiscoverHeader extends StatelessWidget {
       actions: !isDesktop
           ? [
               Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.only(right: AppStyles.spacingS),
                 child: IconButton(
-                  icon: Text(
+                  icon: Icon(
                     themeProvider.getThemeIcon(themeProvider.currentTheme),
-                    style: const TextStyle(fontSize: 24),
+                    color: themeProvider.colors.accent,
+                    size: 24,
                   ),
                   onPressed: () {
                     showModalBottomSheet<void>(

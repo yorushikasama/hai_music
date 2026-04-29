@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hai_music/providers/favorite_provider.dart';
 import 'package:hai_music/service_locator.dart';
-import 'package:hai_music/services/favorite_manager_service.dart';
-import 'package:hai_music/services/preferences_service.dart';
+import 'package:hai_music/services/favorite/favorite_manager_service.dart';
+import 'package:hai_music/services/core/preferences_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -22,12 +22,12 @@ void main() {
       expect(provider.isFavorite('unknown-song'), isFalse);
     });
 
-    test('should notify listeners on refresh', () {
+    test('should notify listeners on refresh', () async {
       final provider = FavoriteProvider();
       bool notified = false;
       provider.addListener(() => notified = true);
 
-      provider.refreshFavorites();
+      await provider.refreshFavorites();
 
       expect(notified, isTrue);
     });

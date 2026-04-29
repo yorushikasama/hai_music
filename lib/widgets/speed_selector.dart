@@ -89,9 +89,7 @@ class SpeedSelector extends StatelessWidget {
                   colors: colors,
                   onTap: () async {
                     await musicProvider.setPlaybackSpeed(speed);
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                    }
+                    Navigator.pop(context);
                   },
                 );
               }).toList(),

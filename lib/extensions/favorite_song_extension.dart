@@ -3,7 +3,6 @@ import '../models/song.dart';
 
 /// FavoriteSong 扩展方法
 extension FavoriteSongExtension on FavoriteSong {
-  /// 转换为 Song 对象
   Song toSong() {
     return Song(
       id: id,
@@ -15,7 +14,8 @@ extension FavoriteSongExtension on FavoriteSong {
       duration: duration,
       platform: platform,
       r2CoverUrl: r2CoverUrl,
-      lyricsLrc: lyricsLrc, // 包含歌词
+      lyricsLrc: lyricsLrc,
+      localCoverPath: localCoverPath,
     );
   }
 }

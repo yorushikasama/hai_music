@@ -1,21 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/downloaded_song.dart';
 import '../models/song.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/download_manager.dart';
-import '../services/download_service.dart';
-import '../services/local_audio_scanner.dart';
+import '../services/download/download_service.dart';
 import '../theme/app_styles.dart';
 import '../utils/format_utils.dart';
 import '../utils/logger.dart';
+import '../utils/platform_utils.dart';
+import '../utils/snackbar_util.dart';
+import '../widgets/confirm_delete_dialog.dart';
 import '../widgets/mini_player.dart';
 import 'downloaded/downloaded_header.dart';
 import 'downloaded/downloaded_songs_list.dart';
@@ -30,7 +28,6 @@ class DownloadedSongsScreen extends StatefulWidget {
 
 class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with SingleTickerProviderStateMixin {
   final _downloadService = DownloadService();
-  final _localScanner = LocalAudioScanner();
   List<DownloadedSong> _downloadedSongs = [];
   List<DownloadedSong> _localSongs = [];
   bool _isLoading = true;
@@ -59,8 +56,12 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
         });
       }
     });
-    unawaited(_loadDownloadedSongs());
-    unawaited(_loadLocalSongs()); // 从缓存加载本地歌曲
+    unawaited(_loadDownloadedSongs().catchError((Object e) {
+      Logger.error('加载下载列表失败', e, null, 'DownloadedScreen');
+    }));
+    unawaited(_loadLocalSongs().catchError((Object e) {
+      Logger.error('加载本地歌曲失败', e, null, 'DownloadedScreen');
+    }));
   }
   
   @override
@@ -107,37 +108,29 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
     }
   }
   
-  /// 从缓存加载本地歌曲
+  /// 从 SQLite 加载本地歌曲（source='local'）
   Future<void> _loadLocalSongs() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedJson = prefs.getString('local_scanned_songs');
+      final songs = await _downloadService.getLocalSongs();
       
-      if (cachedJson != null && cachedJson.isNotEmpty) {
-        final List<dynamic> jsonList = jsonDecode(cachedJson) as List<dynamic>;
-        final songs = jsonList.map((json) => DownloadedSong.fromJson(json as Map<String, dynamic>)).toList();
-        
-        if (mounted) {
-          setState(() {
-            _localSongs = songs;
-          });
-        }
-        Logger.success('加载到 ${songs.length} 首下载歌曲', 'DownloadedScreen');
+      if (mounted) {
+        setState(() {
+          _localSongs = songs;
+        });
       }
+      Logger.success('加载到 ${songs.length} 首本地歌曲', 'DownloadedScreen');
     } catch (e) {
-      Logger.error('加载下载列表失败', e, null, 'DownloadedScreen');
+      Logger.error('加载本地歌曲失败', e, null, 'DownloadedScreen');
     }
   }
   
-  /// 保存本地歌曲到缓存
-  Future<void> _saveLocalSongsCache(List<DownloadedSong> songs) async {
+  /// 保存本地歌曲到 SQLite
+  Future<void> _saveLocalSongsToDb(List<DownloadedSong> songs) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonList = songs.map((s) => s.toJson()).toList();
-      await prefs.setString('local_scanned_songs', jsonEncode(jsonList));
-      Logger.success('已缓存 ${songs.length} 首本地歌曲', 'DownloadedScreen');
+      await _downloadService.saveLocalSongs(songs);
+      Logger.success('已保存 ${songs.length} 首本地歌曲到数据库', 'DownloadedScreen');
     } catch (e) {
-      Logger.error('保存缓存失败', e, null, 'DownloadedScreen');
+      Logger.error('保存本地歌曲失败', e, null, 'DownloadedScreen');
     }
   }
   
@@ -153,17 +146,11 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
         builder: (context) => Center(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 48),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppStyles.spacingXXL),
             decoration: BoxDecoration(
               color: colors.surface,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
+              borderRadius: AppStyles.borderRadiusLarge,
+              boxShadow: AppStyles.getShadows(colors.isLight),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -172,7 +159,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                   color: colors.accent,
                   strokeWidth: 3,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: AppStyles.spacingXXL),
                 Text(
                   '正在扫描设备音频...',
                   style: TextStyle(
@@ -198,10 +185,10 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
     
     try {
       // 使用 MediaStore 扫描所有音频
-      final scannedSongs = await _localScanner.scanAllAudio();
+      final scannedSongs = await _downloadService.scanLocalAudio();
       
-      // 保存到缓存
-      await _saveLocalSongsCache(scannedSongs);
+      // 保存到 SQLite
+      await _saveLocalSongsToDb(scannedSongs);
       
       if (mounted) {
         Navigator.pop(context); // 关闭加载对话框
@@ -210,51 +197,21 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
           _localSongs = scannedSongs;
         });
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '扫描完成，找到 ${scannedSongs.length} 首本地音乐',
-                    style: const TextStyle(fontSize: 15),
-                  ),
-                ),
-              ],
-            ),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.green.shade700,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-          ),
+        AppSnackBar.showWithContext(
+          context,
+          '扫描完成，找到 ${scannedSongs.length} 首本地音乐',
+          type: SnackBarType.success,
+          duration: const Duration(seconds: 3),
         );
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // 关闭加载对话框
+        Navigator.pop(context);
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.white, size: 20),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '扫描失败\n请确保已授予存储权限',
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.red.shade700,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-          ),
+        AppSnackBar.showWithContext(
+          context,
+          '扫描失败，请确保已授予存储权限',
+          type: SnackBarType.error,
         );
       }
     }
@@ -346,29 +303,9 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
                     });
                   },
                   onPlay: (downloadedSong) {
-                    // 转换为 Song 对象并播放
-                    final song = Song(
-                      id: downloadedSong.id,
-                      title: downloadedSong.title,
-                      artist: downloadedSong.artist,
-                      album: downloadedSong.album,
-                      coverUrl: downloadedSong.coverUrl,
-                      audioUrl: _convertToFileUri(downloadedSong.localAudioPath), // 使用本地文件
-                      duration: downloadedSong.duration,
-                      platform: downloadedSong.platform,
-                    );
+                    final song = _downloadedSongToSong(downloadedSong);
 
-                    // 将所有下载的歌曲转换为播放列表
-                    final allSongs = _filteredSongs.map((d) => Song(
-                          id: d.id,
-                          title: d.title,
-                          artist: d.artist,
-                          album: d.album,
-                          coverUrl: d.coverUrl,
-                          audioUrl: _convertToFileUri(d.localAudioPath),
-                          duration: d.duration,
-                          platform: d.platform,
-                        )).toList();
+                    final allSongs = _filteredSongs.map(_downloadedSongToSong).toList();
 
                     unawaited(musicProvider.playSong(song, playlist: allSongs));
                   },
@@ -391,7 +328,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
 
   Widget _buildEmptyState(ThemeColors colors) {
     final isSearchEmpty = _isSearching && _searchController.text.isNotEmpty;
-    
+
     // 本地音乐标签页的空状态
     if (_currentTabIndex == 1 && !isSearchEmpty) {
       return Center(
@@ -401,64 +338,80 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(AppStyles.spacingXXL),
                 decoration: BoxDecoration(
-                  color: colors.accent.withValues(alpha: 0.1),
+                  color: colors.accent.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.accent.withValues(alpha: 0.06),
+                      blurRadius: 30,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
                 child: Icon(
                   Icons.folder_open_rounded,
-                  size: 64,
-                  color: colors.accent,
+                  size: 56,
+                  color: colors.accent.withValues(alpha: 0.7),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppStyles.spacingXXL),
               Text(
                 '还没有扫描本地音乐',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: colors.textPrimary,
-                ),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppStyles.spacingS),
               Text(
-                '点击右上角的刷新按钮\n扫描设备中的音频文件',
+                '扫描设备中的音频文件\n即可在这里管理和播放',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   color: colors.textSecondary,
-                  height: 1.5,
+                  height: 1.6,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-              // 扫描按钮
+              const SizedBox(height: AppStyles.spacingXXXL),
               Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: _scanLocalAudio,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  borderRadius: AppStyles.borderRadiusLarge,
+                  child: Ink(
                     decoration: BoxDecoration(
-                      color: colors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: colors.accent.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.refresh_rounded, color: colors.accent, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          '点击此图标开始扫描',
-                          style: TextStyle(
-                            color: colors.accent,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      gradient: LinearGradient(
+                        colors: [
+                          colors.accent,
+                          colors.accent.withValues(alpha: 0.8),
+                        ],
+                      ),
+                      borderRadius: AppStyles.borderRadiusLarge,
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.accent.withValues(alpha: 0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                          const SizedBox(width: 10),
+                          Text(
+                            '开始扫描',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -468,34 +421,38 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
         ),
       );
     }
-    
+
     // 应用下载标签页或搜索结果为空的状态
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            isSearchEmpty ? Icons.search_off : Icons.download_outlined,
-            size: 80,
-            color: colors.textSecondary.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: AppStyles.spacingL),
-          Text(
-            isSearchEmpty ? '未找到相关歌曲' : '还没有下载的歌曲',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: colors.textPrimary,
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: colors.card.withValues(alpha: 0.3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isSearchEmpty ? Icons.search_off_rounded : Icons.download_outlined,
+              size: 56,
+              color: colors.textSecondary.withValues(alpha: 0.4),
             ),
           ),
-          const SizedBox(height: AppStyles.spacingS),
+          const SizedBox(height: 24),
           Text(
-            isSearchEmpty 
-                ? '试试其他关键词吧' 
-                : '在播放器中点击下载按钮保存歌曲到本地',
+            isSearchEmpty ? '未找到相关歌曲' : '还没有下载的歌曲',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isSearchEmpty
+                ? '试试其他关键词吧'
+                : '在播放器中点击下载按钮\n保存歌曲到本地',
             style: TextStyle(
               fontSize: 14,
               color: colors.textSecondary,
+              height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
@@ -505,76 +462,84 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
   }
 
   void _showDeleteDialog(DownloadedSong song) {
-    final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
-    
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: colors.card,
-        title: Text('删除下载', style: TextStyle(color: colors.textPrimary)),
-        content: Text(
-          '确定要删除《${song.title}》吗？',
-          style: TextStyle(color: colors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('取消', style: TextStyle(color: colors.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              final messenger = ScaffoldMessenger.of(context);
-              
-              navigator.pop();
-              
-              final success = await _downloadService.deleteDownloadedSong(song.id);
-              
-              if (mounted) {
-                if (success) {
-                  // 从下载管理器中移除任务记录
-                  DownloadManager().removeTask(song.id);
-                  
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text('已删除：${song.title}'),
-                      duration: const Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: Colors.orange.shade700,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  );
-                  unawaited(_loadDownloadedSongs());
-                } else {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: const Text('删除失败，请重试'),
-                      duration: const Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: Colors.red.shade700,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
+    final isLocalTab = song.source.isLocal;
+
+    ConfirmDeleteDialog.show(
+      context,
+      type: ConfirmDeleteType.single,
+      title: '删除${isLocalTab ? "本地" : "下载"}歌曲',
+      message: isLocalTab
+          ? '确定要删除本地歌曲《${song.title}》吗？\n将从列表中移除，同时尝试删除文件。'
+          : '确定要删除下载的《${song.title}》吗？',
+      itemName: song.title,
+    ).then((confirmed) async {
+      if (confirmed != true) return;
+
+      final result = await _downloadService.deleteSongs([song]);
+
+      if (!mounted) return;
+
+      if (result.allSuccess) {
+        // 从 UI 列表中移除
+        _downloadedSongs.removeWhere((s) => s.id == song.id);
+        _localSongs.removeWhere((s) => s.id == song.id);
+        AppSnackBar.show(
+          '已删除：${song.title}',
+          type: SnackBarType.info,
+        );
+        setState(() {});
+      } else {
+        AppSnackBar.show(
+          '删除失败，请重试',
+          type: SnackBarType.error,
+        );
+      }
+    });
   }
-  /// 将文件路径转换为正确的 file:// URI
   String _convertToFileUri(String filePath) {
-    final uri = Uri.file(filePath, windows: io.Platform.isWindows);
+    final uri = Uri.file(filePath, windows: PlatformUtils.isWindows);
     final uriString = uri.toString();
     Logger.info('原始路径: $filePath', 'FileUri');
     Logger.info('转换后URI: $uriString', 'FileUri');
     return uriString;
+  }
+
+  String _getAudioUrl(DownloadedSong d) {
+    final contentUri = d.contentUri;
+    if (contentUri != null && contentUri.isNotEmpty) {
+      Logger.info('使用 contentUri: $contentUri', 'FileUri');
+      return contentUri;
+    }
+    if (d.localAudioPath.isNotEmpty) {
+      return _convertToFileUri(d.localAudioPath);
+    }
+    Logger.warning('音频路径为空: ${d.title}', 'FileUri');
+    return '';
+  }
+
+  Song _downloadedSongToSong(DownloadedSong d) {
+    String coverUrl = d.coverUrl;
+    if (d.localCoverPath != null && d.localCoverPath!.isNotEmpty) {
+      // 使用缓存的 file:// URI，避免列表构建时 existsSync() IO
+      coverUrl = _convertToFileUri(d.localCoverPath!);
+    }
+
+    // 歌词内容不在此处同步读取文件，播放时由 LyricsLoadingService 按需异步加载
+    // 通过 localLyricsPath / localTransPath 提供文件路径即可
+
+    return Song(
+      id: d.id,
+      title: d.title,
+      artist: d.artist,
+      album: d.album,
+      coverUrl: coverUrl,
+      audioUrl: _getAudioUrl(d),
+      duration: d.duration,
+      platform: d.platform,
+      localCoverPath: d.localCoverPath,
+      localLyricsPath: d.localLyricsPath,
+      localTransPath: d.localTransPath,
+    );
   }
 
   /// 批量删除
@@ -585,43 +550,18 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
 
     if (selectedSongs.isEmpty) return;
 
-    // 确认对话框
-    final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: colors.surface,
-          title: Text(
-            '批量删除',
-            style: TextStyle(color: colors.textPrimary),
-          ),
-          content: Text(
-            '确定要删除 ${_selectedIds.length} 首歌曲吗？\n删除后将无法恢复。',
-            style: TextStyle(color: colors.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text('取消', style: TextStyle(color: colors.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('删除'),
-            ),
-          ],
-        );
-      },
+    final confirmed = await ConfirmDeleteDialog.show(
+      context,
+      type: ConfirmDeleteType.batch,
+      title: '批量删除',
+      message: '确定要删除选中的歌曲吗？\n删除后将无法恢复。',
+      itemCount: _selectedIds.length,
     );
 
     if (confirmed != true) return;
 
-    // 显示加载对话框
     if (!mounted) return;
+    final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -630,38 +570,35 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> with Sing
       ),
     ));
 
-    int successCount = 0;
-    final downloadManager = DownloadManager();
-    
-    for (final song in selectedSongs) {
-      final success = await _downloadService.deleteDownloadedSong(song.id);
-      if (success) {
-        successCount++;
-        // 从下载管理器中移除任务记录
-        downloadManager.removeTask(song.id);
-      }
-    }
+    final result = await _downloadService.deleteSongs(selectedSongs);
 
     if (!mounted) return;
-    Navigator.pop(context); // 关闭加载对话框
+    Navigator.pop(context);
+
+    // 从 UI 列表中移除已删除的歌曲
+    final deletedIdSet = result.deletedIds.toSet();
+    _downloadedSongs.removeWhere((s) => deletedIdSet.contains(s.id));
+    _localSongs.removeWhere((s) => deletedIdSet.contains(s.id));
 
     setState(() {
       _isSelectionMode = false;
       _selectedIds.clear();
     });
 
-    // 刷新列表
-    await _loadDownloadedSongs();
-
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已删除 $successCount 首歌曲'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.orange.shade700,
-      ),
-    );
+    if (result.allSuccess) {
+      AppSnackBar.showWithContext(
+        context,
+        '已删除 ${result.totalSongs} 首歌曲',
+        type: SnackBarType.info,
+      );
+    } else {
+      AppSnackBar.showWithContext(
+        context,
+        '已删除 ${result.deletedIds.length}/${result.totalSongs} 首歌曲，${result.failedIds.length} 首失败',
+        type: SnackBarType.error,
+      );
+    }
   }
 }

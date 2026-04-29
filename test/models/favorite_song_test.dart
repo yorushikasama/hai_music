@@ -91,7 +91,7 @@ void main() {
 
         final json = song.toJson();
 
-        expect(json.containsKey('cover_url'), isTrue);
+        expect(json.containsKey('original_cover_url'), isTrue);
         expect(json.containsKey('local_audio_path'), isTrue);
         expect(json.containsKey('created_at'), isTrue);
         expect(json.containsKey('coverUrl'), isFalse);

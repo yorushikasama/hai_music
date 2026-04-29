@@ -51,6 +51,26 @@ class StorageConfig {
     };
   }
 
+  /// 返回敏感字段已掩码的安全版本，用于日志和调试
+  Map<String, dynamic> toSafeJson() {
+    return {
+      'supabaseUrl': supabaseUrl,
+      'supabaseAnonKey': _maskSecret(supabaseAnonKey),
+      'r2Endpoint': r2Endpoint,
+      'r2AccessKey': _maskSecret(r2AccessKey),
+      'r2SecretKey': _maskSecret(r2SecretKey),
+      'r2BucketName': r2BucketName,
+      'r2Region': r2Region,
+      'r2CustomDomain': r2CustomDomain,
+      'enableSync': enableSync,
+    };
+  }
+
+  static String _maskSecret(String value) {
+    if (value.length <= 8) return '****';
+    return '${value.substring(0, 4)}****${value.substring(value.length - 4)}';
+  }
+
   bool get isValid {
     return supabaseUrl.isNotEmpty &&
         supabaseAnonKey.isNotEmpty &&

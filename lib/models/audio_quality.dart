@@ -102,6 +102,9 @@ enum AudioQuality {
   final List<Color> gradientColors;
   final String semanticLabel;
 
+  Color get gradientStart => gradientColors.isNotEmpty ? gradientColors[0] : color;
+  Color get gradientEnd => gradientColors.length > 1 ? gradientColors[1] : color;
+
   const AudioQuality(
     this.value,
     this.label,

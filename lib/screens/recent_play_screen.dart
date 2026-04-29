@@ -8,8 +8,8 @@ import '../models/song.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
+import '../widgets/confirm_delete_dialog.dart';
 
-/// 最近播放页面
 class RecentPlayScreen extends StatefulWidget {
   const RecentPlayScreen({super.key});
 
@@ -22,7 +22,6 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
   List<PlayHistory> _filteredHistory = [];
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
-  // 🔧 优化:移除未使用的字段 _isSearching (只写入,从未读取)
 
   @override
   void initState() {
@@ -30,13 +29,13 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
     unawaited(_loadHistory());
     _searchController.addListener(_onSearchChanged);
   }
-  
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
-  
+
   void _onSearchChanged() {
     final query = _searchController.text.toLowerCase();
     setState(() {
@@ -45,8 +44,8 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
       } else {
         _filteredHistory = _history.where((item) {
           return item.title.toLowerCase().contains(query) ||
-                 item.artist.toLowerCase().contains(query) ||
-                 item.album.toLowerCase().contains(query);
+              item.artist.toLowerCase().contains(query) ||
+              item.album.toLowerCase().contains(query);
         }).toList();
       }
     });
@@ -54,10 +53,10 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
 
   Future<void> _loadHistory() async {
     setState(() => _isLoading = true);
-    
+
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
     final history = await musicProvider.historyService.getHistory();
-    
+
     if (mounted) {
       setState(() {
         _history = history;
@@ -76,94 +75,13 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
       backgroundColor: colors.background,
       body: Column(
         children: [
-          // 自定义顶部导航栏
-          Container(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 16,
-              right: 16,
-              bottom: 16,
-            ),
-            decoration: BoxDecoration(
-              color: colors.surface.withValues(alpha: 0.95),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // 返回按钮
-                IconButton(
-                  icon: Icon(Icons.arrow_back_ios_new, color: colors.textPrimary, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                  padding: const EdgeInsets.all(8),
-                ),
-                const SizedBox(width: 8),
-                // 标题
-                Icon(Icons.history, color: colors.accent, size: 26),
-                const SizedBox(width: 12),
-                Text(
-                  '最近播放',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const Spacer(),
-                // 清空按钮
-                if (_history.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('清空历史记录'),
-                          content: const Text('确定要清空所有播放历史吗？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('取消'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('确定', style: TextStyle(color: Colors.red)),
-                            ),
-                          ],
-                        ),
-                      );
-                      
-                      if (confirm ?? false) {
-                        await musicProvider.historyService.clearHistory();
-                        unawaited(_loadHistory());
-                      }
-                    },
-                    icon: Icon(Icons.delete_outline, color: colors.textSecondary, size: 20),
-                    label: Text(
-                      '清空',
-                      style: TextStyle(color: colors.textSecondary),
-                    ),
-                  ),
-                const SizedBox(width: 8),
-                // 刷新按钮
-                IconButton(
-                  icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
-                  onPressed: _loadHistory,
-                  tooltip: '刷新',
-                  padding: const EdgeInsets.all(8),
-                ),
-              ],
-            ),
-          ),
-          // 搜索框
+          _buildHeader(context, colors, musicProvider),
           if (_history.isNotEmpty)
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppStyles.spacingXL,
+                vertical: AppStyles.spacingS,
+              ),
               child: TextField(
                 controller: _searchController,
                 style: TextStyle(color: colors.textPrimary),
@@ -180,123 +98,192 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                   filled: true,
                   fillColor: colors.card,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: AppStyles.borderRadiusMedium,
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppStyles.spacingL,
+                    vertical: AppStyles.spacingM,
+                  ),
                 ),
               ),
             ),
-          // 内容区域
           Expanded(
             child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(color: colors.accent),
-                  )
+                ? Center(child: CircularProgressIndicator(color: colors.accent))
                 : _history.isEmpty
-                    ? _buildEmptyState(colors)
-                    : _buildHistoryList(colors, musicProvider),
+                    ? _buildEmptyState(context, colors)
+                    : _buildHistoryList(context, colors, musicProvider),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState(ThemeColors colors) {
+  Widget _buildHeader(BuildContext context, ThemeColors colors, MusicProvider musicProvider) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + AppStyles.spacingS,
+        left: AppStyles.spacingL,
+        right: AppStyles.spacingL,
+        bottom: AppStyles.spacingL,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.95),
+        boxShadow: AppStyles.getShadows(colors.isLight),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(Icons.arrow_back_ios_new, color: colors.textPrimary, size: 20),
+            onPressed: () => Navigator.pop(context),
+            padding: const EdgeInsets.all(AppStyles.spacingS),
+          ),
+          const SizedBox(width: AppStyles.spacingS),
+          Container(
+            padding: const EdgeInsets.all(AppStyles.spacingXS + 2),
+            decoration: BoxDecoration(
+              color: colors.accent.withValues(alpha: 0.15),
+              borderRadius: AppStyles.borderRadiusSmall,
+            ),
+            child: Icon(Icons.history_rounded, color: colors.accent, size: 18),
+          ),
+          const SizedBox(width: AppStyles.spacingM),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('最近播放', style: textTheme.headlineMedium),
+                if (_history.isNotEmpty)
+                  Text(
+                    '${_history.length} 首',
+                    style: textTheme.labelMedium,
+                  ),
+              ],
+            ),
+          ),
+          if (_history.isNotEmpty)
+            TextButton.icon(
+              onPressed: () async {
+                final confirm = await ConfirmDeleteDialog.show(
+                  context,
+                  type: ConfirmDeleteType.batch,
+                  title: '清空历史记录',
+                  message: '确定要清空所有播放历史吗？',
+                  confirmText: '清空',
+                  icon: Icons.history_rounded,
+                );
+
+                if (confirm ?? false) {
+                  await musicProvider.historyService.clearHistory();
+                  unawaited(_loadHistory());
+                }
+              },
+              icon: Icon(Icons.delete_outline, color: colors.textSecondary, size: 20),
+              label: Text('清空', style: TextStyle(color: colors.textSecondary)),
+            ),
+          IconButton(
+            icon: Icon(Icons.refresh_rounded, color: colors.textSecondary, size: 22),
+            onPressed: _loadHistory,
+            tooltip: '刷新',
+            padding: const EdgeInsets.all(AppStyles.spacingS),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, ThemeColors colors) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.history,
-            size: 80,
-            color: colors.textSecondary.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: AppStyles.spacingL),
-          Text(
-            '暂无播放记录',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: colors.textPrimary,
+          Container(
+            padding: const EdgeInsets.all(AppStyles.spacingXXL),
+            decoration: BoxDecoration(
+              color: colors.accent.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.history_rounded,
+              size: 56,
+              color: colors.textSecondary.withValues(alpha: 0.5),
             ),
           ),
+          const SizedBox(height: AppStyles.spacingXXL),
+          Text('暂无播放记录', style: textTheme.titleLarge),
           const SizedBox(height: AppStyles.spacingS),
-          Text(
-            '播放过的歌曲会显示在这里',
-            style: TextStyle(
-              fontSize: 14,
-              color: colors.textSecondary,
-            ),
-          ),
+          Text('播放过的歌曲会显示在这里', style: textTheme.bodyMedium),
         ],
       ),
     );
   }
 
-  Widget _buildHistoryList(ThemeColors colors, MusicProvider musicProvider) {
+  Widget _buildHistoryList(BuildContext context, ThemeColors colors, MusicProvider musicProvider) {
     final displayList = _filteredHistory;
-    
+    final textTheme = Theme.of(context).textTheme;
+
     if (displayList.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 64, color: colors.textSecondary.withValues(alpha: 0.5)),
-            const SizedBox(height: 16),
-            Text(
-              '没有找到匹配的记录',
-              style: TextStyle(color: colors.textSecondary, fontSize: 16),
-            ),
+            Icon(Icons.search_off_rounded, size: 64, color: colors.textSecondary.withValues(alpha: 0.5)),
+            const SizedBox(height: AppStyles.spacingL),
+            Text('没有找到匹配的记录', style: textTheme.bodyLarge),
           ],
         ),
       );
     }
-    
+
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppStyles.spacingXL,
+        vertical: AppStyles.spacingL,
+      ),
       itemCount: displayList.length,
       itemBuilder: (context, index) {
         final history = displayList[index];
         final isPlaying = musicProvider.currentSong?.id == history.id;
-        
+
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: _buildHistoryItem(history, isPlaying, colors, musicProvider),
+          padding: const EdgeInsets.only(bottom: AppStyles.spacingM),
+          child: _buildHistoryItem(context, history, isPlaying, colors, musicProvider, textTheme),
         );
       },
     );
   }
 
   Widget _buildHistoryItem(
+    BuildContext context,
     PlayHistory history,
     bool isPlaying,
     ThemeColors colors,
     MusicProvider musicProvider,
+    TextTheme textTheme,
   ) {
     return Container(
       decoration: BoxDecoration(
         color: isPlaying
             ? colors.accent.withValues(alpha: 0.08)
             : colors.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppStyles.borderRadiusLarge,
         border: Border.all(
           color: isPlaying
               ? colors.accent.withValues(alpha: 0.3)
               : colors.border.withValues(alpha: 0.1),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppStyles.getShadows(colors.isLight),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppStyles.borderRadiusLarge,
           onTap: () {
             final song = Song(
               id: history.id,
@@ -307,35 +294,36 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
               duration: history.duration,
               platform: history.platform,
             );
-            
             unawaited(musicProvider.playSong(song));
           },
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppStyles.spacingM),
             child: Row(
               children: [
-                // 封面图
                 Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: AppStyles.borderRadiusMedium,
                       child: CachedNetworkImage(
                         imageUrl: history.coverUrl,
-                        width: 60,
-                        height: 60,
+                        width: 56,
+                        height: 56,
                         fit: BoxFit.cover,
+                        memCacheWidth: 112,
+                        memCacheHeight: 112,
                         placeholder: (context, url) => Container(
-                          width: 60,
-                          height: 60,
+                          width: 56,
+                          height: 56,
                           color: colors.card.withValues(alpha: 0.3),
-                          child: Icon(Icons.music_note, color: colors.textSecondary.withValues(alpha: 0.3)),
+                          child: Icon(Icons.music_note_rounded, color: colors.textSecondary.withValues(alpha: 0.3), size: 22),
                         ),
                         errorWidget: (context, url, error) => Container(
-                          width: 60,
-                          height: 60,
+                          width: 56,
+                          height: 56,
                           color: colors.card.withValues(alpha: 0.3),
-                          child: Icon(Icons.music_note, color: colors.textSecondary),
+                          child: Icon(Icons.music_note_rounded, color: colors.textSecondary, size: 22),
                         ),
+                        fadeInDuration: AppStyles.animNormal,
                       ),
                     ),
                     if (isPlaying)
@@ -343,39 +331,35 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppStyles.borderRadiusMedium,
                           ),
                           child: Icon(
                             musicProvider.isPlaying ? Icons.equalizer_rounded : Icons.pause_rounded,
                             color: Colors.white,
-                            size: 28,
+                            size: 26,
                           ),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(width: 14),
-                // 歌曲信息
+                const SizedBox(width: AppStyles.spacingM),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         history.title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                        style: textTheme.titleSmall?.copyWith(
                           color: isPlaying ? colors.accent : colors.textPrimary,
                           height: 1.3,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppStyles.spacingXS),
                       Text(
                         history.artist,
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: textTheme.labelMedium?.copyWith(
                           color: colors.textSecondary.withValues(alpha: 0.8),
                           height: 1.2,
                         ),
@@ -385,25 +369,26 @@ class _RecentPlayScreenState extends State<RecentPlayScreen> {
                       const SizedBox(height: 2),
                       Text(
                         _formatPlayedTime(history.playedAt),
-                        style: TextStyle(
-                          fontSize: 11,
+                        style: textTheme.labelSmall?.copyWith(
                           color: colors.textSecondary.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                // 删除按钮
+                const SizedBox(width: AppStyles.spacingM),
                 IconButton(
                   icon: Icon(Icons.close, color: colors.textSecondary.withValues(alpha: 0.6), size: 20),
-                  onPressed: () {
-                    setState(() {
-                      _history.removeWhere((h) => h.id == history.id);
-                    });
-                    musicProvider.historyService.removeHistory(history.id);
+                  onPressed: () async {
+                    await musicProvider.historyService.removeHistory(history.id);
+                    if (mounted) {
+                      setState(() {
+                        _history.removeWhere((h) => h.id == history.id);
+                        _filteredHistory.removeWhere((h) => h.id == history.id);
+                      });
+                    }
                   },
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(AppStyles.spacingS),
                   constraints: const BoxConstraints(),
                 ),
               ],

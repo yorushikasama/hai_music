@@ -108,6 +108,8 @@ class SearchResultsList extends StatelessWidget {
                     width: 56,
                     height: 56,
                     fit: BoxFit.cover,
+                    memCacheWidth: 112,
+                    memCacheHeight: 112,
                     placeholder: (context, url) => Container(
                       width: 56,
                       height: 56,

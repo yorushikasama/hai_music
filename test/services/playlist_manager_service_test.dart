@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hai_music/models/play_mode.dart';
 import 'package:hai_music/models/song.dart';
-import 'package:hai_music/services/playlist_manager_service.dart';
+import 'package:hai_music/services/playback/playlist_manager_service.dart';
 
 void main() {
   group('PlaylistManagerService', () {

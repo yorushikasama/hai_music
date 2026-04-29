@@ -257,6 +257,7 @@ class _LargeSongCard extends StatelessWidget {
                             child: CachedNetworkImage(
                               imageUrl: song.coverUrl,
                               fit: BoxFit.cover,
+                              memCacheWidth: 400,
                               placeholder: (context, url) => Container(
                                 color: colors.card.withValues(alpha: 0.5),
                               ),

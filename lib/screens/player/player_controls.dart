@@ -1,30 +1,28 @@
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../extensions/duration_extension.dart';
 import '../../models/play_mode.dart';
 import '../../models/song.dart';
-import '../../providers/audio_settings_provider.dart';
-import '../../providers/favorite_provider.dart';
 import '../../providers/music_provider.dart';
 import '../../providers/theme_provider.dart';
-import '../../screens/download_progress_screen.dart';
-import '../../services/download_manager.dart';
-import '../../services/download_service.dart';
+import '../../services/download/download_service.dart';
+import '../../utils/download_utils.dart';
 import '../../utils/platform_utils.dart';
-import '../../widgets/audio_quality_selector.dart';
-import '../../widgets/speed_selector.dart';
+import '../../widgets/volume_control_dialog.dart';
 import 'player_bottom_sheets.dart';
+import 'widgets/player_favorite_button.dart';
+import 'widgets/player_play_button.dart';
+import 'widgets/player_progress_bar.dart';
+import 'widgets/player_quality_speed_buttons.dart';
 
 class PlayerControlPanel extends StatefulWidget {
-  final MusicProvider musicProvider;
   final DownloadService downloadService;
 
   const PlayerControlPanel({
-    required this.musicProvider, required this.downloadService, super.key,
+    required this.downloadService,
+    super.key,
   });
 
   @override
@@ -32,15 +30,11 @@ class PlayerControlPanel extends StatefulWidget {
 }
 
 class _PlayerControlPanelState extends State<PlayerControlPanel> {
-  bool _isDragging = false;
-  double _dragValue = 0.0;
-  double _volumeBeforeMute = 0.5;
-
-  MusicProvider get musicProvider => widget.musicProvider;
   DownloadService get downloadService => widget.downloadService;
 
   @override
   Widget build(BuildContext context) {
+    final musicProvider = context.watch<MusicProvider>();
     final isAndroid = PlatformUtils.isAndroid;
 
     return Container(
@@ -63,7 +57,7 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildProgressBar(context, musicProvider),
+              const PlayerProgressBar(),
               SizedBox(height: isAndroid ? 16 : 20),
               isAndroid
                   ? _buildAndroidControls(context, musicProvider)
@@ -75,83 +69,7 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
     );
   }
 
-  Widget _buildProgressBar(BuildContext context, MusicProvider musicProvider) {
-    final sliderValue = _isDragging
-        ? _dragValue
-        : () {
-            if (musicProvider.totalDuration.inSeconds <= 0) return 0.0;
-            final value = musicProvider.currentPosition.inSeconds /
-                musicProvider.totalDuration.inSeconds;
-            if (value.isNaN || value.isInfinite) return 0.0;
-            return value.clamp(0.0, 1.0);
-          }();
-
-    final displayPosition = _isDragging
-        ? Duration(seconds: (_dragValue * musicProvider.totalDuration.inSeconds).round())
-        : musicProvider.currentPosition;
-
-    return Column(
-      children: [
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: Colors.white,
-            inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-            thumbColor: Colors.white,
-            overlayColor: Colors.white.withValues(alpha: 0.2),
-          ),
-          child: Slider(
-            value: sliderValue,
-            onChanged: (value) {
-              setState(() {
-                _isDragging = true;
-                _dragValue = value;
-              });
-            },
-            onChangeEnd: (value) {
-              if (musicProvider.totalDuration.inSeconds > 0) {
-                final position = Duration(
-                  seconds: (value * musicProvider.totalDuration.inSeconds).round(),
-                );
-                musicProvider.seekTo(position);
-              }
-              setState(() {
-                _isDragging = false;
-              });
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                displayPosition.toMinutesSeconds(),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.6),
-                ),
-              ),
-              Text(
-                musicProvider.totalDuration.toMinutesSeconds(),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildAndroidControls(BuildContext context, MusicProvider musicProvider) {
-    final song = musicProvider.currentSong;
-
     return Column(
       children: [
         Row(
@@ -168,51 +86,22 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
               size: 36,
               onPressed: () => musicProvider.playPrevious(),
             ),
-            _buildPlayButton(musicProvider),
+            const PlayerPlayButton(),
             _buildSimpleButton(
               icon: Icons.skip_next_rounded,
               size: 36,
               onPressed: () => musicProvider.playNext(),
             ),
-            if (song != null)
-              Provider.of<FavoriteProvider>(context).isFavoriteOperationInProgress(song.id)
-                  ? const SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                          ),
-                        ),
-                      ),
-                    )
-                  : _buildSimpleButton(
-                      icon: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      size: 28,
-                      color: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
-                          ? Colors.red
-                          : null,
-                      onPressed: () async {
-                        await Provider.of<FavoriteProvider>(context, listen: false).toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
-                      },
-                    )
-            else
-              const SizedBox(width: 44),
+            const PlayerFavoriteButton(iconSize: 28, indicatorSize: 20),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildQualityButton(context, musicProvider),
+            const PlayerQualityButton(),
             const SizedBox(width: 16),
-            _buildSpeedButton(context, musicProvider),
+            const PlayerSpeedButton(),
             const SizedBox(width: 16),
             _buildSimpleButton(
               icon: Icons.timer_outlined,
@@ -257,7 +146,7 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
               onPressed: () => musicProvider.playPrevious(),
             ),
             const SizedBox(width: 16),
-            _buildPlayButton(musicProvider),
+            const PlayerPlayButton(),
             const SizedBox(width: 16),
             _buildSimpleButton(
               icon: Icons.skip_next_rounded,
@@ -270,44 +159,17 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              if (song != null)
-                Provider.of<FavoriteProvider>(context).isFavoriteOperationInProgress(song.id)
-                    ? const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                            ),
-                          ),
-                        ),
-                      )
-                    : _buildSimpleButton(
-                        icon: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        size: 24,
-                        color: Provider.of<FavoriteProvider>(context).isFavorite(song.id)
-                            ? Colors.red
-                            : null,
-                        onPressed: () async {
-                          await Provider.of<FavoriteProvider>(context, listen: false).toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
-                        },
-                      ),
+              const PlayerFavoriteButton(),
               const SizedBox(width: 16),
-              if (Platform.isWindows && song != null)
+              if (PlatformUtils.isWindows && song != null)
                 _buildDownloadButton(context, song),
-              if (Platform.isWindows && song != null)
+              if (PlatformUtils.isWindows && song != null)
                 const SizedBox(width: 16),
               _buildVolumeControl(context, musicProvider),
               const SizedBox(width: 16),
-              _buildQualityButton(context, musicProvider),
+              const PlayerQualityButton(),
               const SizedBox(width: 16),
-              _buildSpeedButton(context, musicProvider),
+              const PlayerSpeedButton(),
               const SizedBox(width: 16),
               _buildSimpleButton(
                 icon: Icons.timer_outlined,
@@ -324,156 +186,6 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildQualityButton(BuildContext context, MusicProvider musicProvider) {
-    final audioSettings = Provider.of<AudioSettingsProvider>(context);
-    final quality = audioSettings.audioQuality;
-    final isSwitching = audioSettings.isQualitySwitching;
-    return Semantics(
-      label: isSwitching
-          ? '正在切换音质...'
-          : '音质选择，当前: ${quality.semanticLabel}',
-      button: true,
-      child: TextButton(
-        onPressed: isSwitching
-            ? null
-            : () {
-                showModalBottomSheet<void>(
-                  context: context,
-                  backgroundColor: Colors.transparent,
-                  isScrollControlled: true,
-                  builder: (context) => const AudioQualitySelector(),
-                );
-              },
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                quality.gradientColors[0].withValues(alpha: 0.25),
-                quality.gradientColors[1].withValues(alpha: 0.15),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: quality.color.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isSwitching)
-                SizedBox(
-                  width: 15,
-                  height: 15,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: quality.color.withValues(alpha: 0.9),
-                  ),
-                )
-              else
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (child, animation) {
-                    return ScaleTransition(scale: animation, child: child);
-                  },
-                  child: Icon(
-                    quality.icon,
-                    key: ValueKey(quality.name),
-                    size: 15,
-                    color: quality.color.withValues(alpha: 0.9),
-                  ),
-                ),
-              const SizedBox(width: 4),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                child: Text(
-                  quality.label,
-                  key: ValueKey(quality.label),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: quality.color.withValues(alpha: 0.95),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSpeedButton(BuildContext context, MusicProvider musicProvider) {
-    final currentSpeed = musicProvider.playbackSpeed;
-    final colors = Provider.of<ThemeProvider>(context).colors;
-    return Semantics(
-      label: currentSpeed.semanticLabel,
-      button: true,
-      child: TextButton(
-        onPressed: () => showSpeedSelector(context),
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: currentSpeed.isNormal
-                ? colors.accent.withValues(alpha: 0.1)
-                : colors.accent.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: currentSpeed.isNormal
-                  ? colors.border.withValues(alpha: 0.3)
-                  : colors.accent.withValues(alpha: 0.4),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.speed_rounded,
-                size: 15,
-                color: currentSpeed.isNormal
-                    ? colors.textSecondary.withValues(alpha: 0.7)
-                    : colors.accent.withValues(alpha: 0.9),
-              ),
-              const SizedBox(width: 4),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 300),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: currentSpeed.isNormal ? FontWeight.w600 : FontWeight.w700,
-                  color: currentSpeed.isNormal
-                      ? colors.textSecondary.withValues(alpha: 0.7)
-                      : colors.accent.withValues(alpha: 0.95),
-                  letterSpacing: 0.3,
-                ),
-                child: Text(currentSpeed.label),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -496,56 +208,6 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
         minHeight: size + 16,
       ),
       onPressed: onPressed,
-    );
-  }
-
-  Widget _buildPlayButton(MusicProvider musicProvider) {
-    final isLoading = musicProvider.isLoading;
-    return Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.3),
-            blurRadius: 20,
-            spreadRadius: 1,
-            offset: const Offset(0, 6),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: isLoading ? null : () => musicProvider.togglePlayPause(),
-          borderRadius: BorderRadius.circular(32),
-          child: Center(
-            child: isLoading
-                ? const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black87),
-                    ),
-                  )
-                : Icon(
-                    musicProvider.isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    color: Colors.black87,
-                    size: 36,
-                  ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -574,121 +236,11 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
         ),
         iconSize: 24,
         onPressed: () {
-          _showVolumeControlDialog(context);
-        },
-      ),
-    );
-  }
-
-  void _showVolumeControlDialog(BuildContext context) {
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final Offset buttonPosition = button.localToGlobal(Offset.zero, ancestor: overlay);
-    final Size buttonSize = button.size;
-
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.transparent,
-      builder: (dialogContext) => Consumer<MusicProvider>(
-        builder: (context, musicProvider, child) {
-          return Stack(
-            children: [
-              Positioned(
-                left: buttonPosition.dx + buttonSize.width / 2 - 35,
-                bottom: overlay.size.height - buttonPosition.dy + 10,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Container(
-                    width: 70,
-                    height: 240,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            if (musicProvider.volume > 0) {
-                              _volumeBeforeMute = musicProvider.volume;
-                              musicProvider.setVolume(0);
-                            } else {
-                              musicProvider.setVolume(_volumeBeforeMute);
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              musicProvider.volume == 0
-                                  ? Icons.volume_off_rounded
-                                  : musicProvider.volume < 0.5
-                                      ? Icons.volume_down_rounded
-                                      : Icons.volume_up_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Expanded(
-                          child: RotatedBox(
-                            quarterTurns: 3,
-                            child: SliderTheme(
-                              data: const SliderThemeData(
-                                trackHeight: 6,
-                                thumbShape: RoundSliderThumbShape(enabledThumbRadius: 8),
-                                overlayShape: RoundSliderOverlayShape(overlayRadius: 16),
-                                activeTrackColor: Colors.white,
-                                inactiveTrackColor: Colors.white54,
-                                thumbColor: Colors.white,
-                                overlayColor: Colors.white24,
-                              ),
-                              child: Slider(
-                                value: musicProvider.volume,
-                                onChanged: (value) {
-                                  musicProvider.setVolume(value);
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          width: 36,
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${(musicProvider.volume * 100).round()}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          final colors = Provider.of<ThemeProvider>(context, listen: false).colors;
+          showVolumeControlDialog(
+            context,
+            colors: colors,
+            isPlayerScreen: true,
           );
         },
       ),
@@ -709,69 +261,11 @@ class _PlayerControlPanelState extends State<PlayerControlPanel> {
           onPressed: () async {
             if (isDownloaded) return;
 
-            final manager = DownloadManager();
-            await manager.init();
-            final success = await manager.addDownload(song);
+            final result = await DownloadService().addDownload(song);
 
-            if (!context.mounted) return;
+            if (!mounted) return;
 
-            if (success) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.download, color: Colors.white, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          '已添加到下载队列：${song.title}',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    ],
-                  ),
-                  duration: const Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: Colors.blue.shade700,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  margin: const EdgeInsets.all(16),
-                  action: SnackBarAction(
-                    label: '查看',
-                    textColor: Colors.white,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (context) => const DownloadProgressScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              );
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.info_outline, color: Colors.white, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          '《${song.title}》已在下载列表中',
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    ],
-                  ),
-                  duration: const Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: Colors.orange.shade700,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  margin: const EdgeInsets.all(16),
-                ),
-              );
-            }
+            DownloadUtils.handleAddDownloadResult(context, result, song.title);
           },
         );
       },

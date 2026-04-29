@@ -1,6 +1,25 @@
 enum SongSource {
   downloaded,
   local,
+  recovered,
+}
+
+extension SongSourceExtension on SongSource {
+  String get label {
+    switch (this) {
+      case SongSource.downloaded:
+        return 'downloaded';
+      case SongSource.local:
+        return 'local';
+      case SongSource.recovered:
+        return 'recovered';
+    }
+  }
+
+  bool get isLocal => this == SongSource.local;
+  bool get isDownloaded => this == SongSource.downloaded;
+  bool get isRecovered => this == SongSource.recovered;
+  bool get hasLocalFile => this == SongSource.local || this == SongSource.recovered;
 }
 
 class DownloadedSong {
@@ -17,12 +36,17 @@ class DownloadedSong {
   final String? platform;
   final DateTime downloadedAt;
   final SongSource source;
+  final int? audioQualityValue;
+  final String? contentUri;
+  final int? fileSize;
 
   DownloadedSong({
     required this.id,
     required this.title,
     required this.artist,
-    required this.localAudioPath, required this.downloadedAt, this.album = '',
+    required this.localAudioPath,
+    required this.downloadedAt,
+    this.album = '',
     this.coverUrl = '',
     this.localCoverPath,
     this.localLyricsPath,
@@ -30,6 +54,9 @@ class DownloadedSong {
     this.duration,
     this.platform,
     this.source = SongSource.downloaded,
+    this.audioQualityValue,
+    this.contentUri,
+    this.fileSize,
   });
 
   factory DownloadedSong.fromJson(Map<String, dynamic> json) {
@@ -45,9 +72,24 @@ class DownloadedSong {
       localTransPath: json['localTransPath'] as String?,
       duration: json['duration'] as int?,
       platform: json['platform'] as String?,
-      downloadedAt: DateTime.parse(json['downloadedAt'] as String),
-      source: json['source'] == 'local' ? SongSource.local : SongSource.downloaded,
+      downloadedAt: DateTime.tryParse(json['downloadedAt'] as String? ?? '') ?? DateTime.now(),
+      source: DownloadedSong.parseSource(json['source']),
+      audioQualityValue: json['audioQualityValue'] as int?,
+      contentUri: json['contentUri'] as String?,
+      fileSize: json['fileSize'] as int?,
     );
+  }
+
+  static SongSource parseSource(dynamic value) {
+    final str = value?.toString() ?? '';
+    switch (str) {
+      case 'local':
+        return SongSource.local;
+      case 'recovered':
+        return SongSource.recovered;
+      default:
+        return SongSource.downloaded;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -64,7 +106,10 @@ class DownloadedSong {
       'duration': duration,
       'platform': platform,
       'downloadedAt': downloadedAt.toIso8601String(),
-      'source': source == SongSource.local ? 'local' : 'downloaded',
+      'source': source.label,
+      'audioQualityValue': audioQualityValue,
+      if (contentUri != null) 'contentUri': contentUri,
+      if (fileSize != null) 'fileSize': fileSize,
     };
   }
 
@@ -73,6 +118,10 @@ class DownloadedSong {
     String? localCoverPath,
     String? localLyricsPath,
     String? localTransPath,
+    int? audioQualityValue,
+    String? contentUri,
+    int? fileSize,
+    int? duration,
   }) {
     return DownloadedSong(
       id: id,
@@ -84,10 +133,13 @@ class DownloadedSong {
       localCoverPath: localCoverPath ?? this.localCoverPath,
       localLyricsPath: localLyricsPath ?? this.localLyricsPath,
       localTransPath: localTransPath ?? this.localTransPath,
-      duration: duration,
+      duration: duration ?? this.duration,
       platform: platform,
       downloadedAt: downloadedAt,
       source: source,
+      audioQualityValue: audioQualityValue ?? this.audioQualityValue,
+      contentUri: contentUri ?? this.contentUri,
+      fileSize: fileSize ?? this.fileSize,
     );
   }
 }

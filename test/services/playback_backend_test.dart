@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hai_music/services/playback_backend.dart';
+import 'package:hai_music/services/playback/playback_backend.dart';
 
 void main() {
   group('PlaybackMediaItem', () {

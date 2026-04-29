@@ -5,8 +5,8 @@ import '../../models/song.dart';
 import '../../providers/favorite_provider.dart';
 import '../../providers/music_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../theme/app_styles.dart';
 
-/// 歌单详情页中的歌曲列表区域（含多选支持）
 class PlaylistSongsSection extends StatelessWidget {
   final List<Song> songs;
   final bool isSelectionMode;
@@ -19,7 +19,16 @@ class PlaylistSongsSection extends StatelessWidget {
   final Future<void> Function(BuildContext context, String action, Song song) onMenuAction;
 
   const PlaylistSongsSection({
-    required this.songs, required this.isSelectionMode, required this.selectedIds, required this.isLoadingMore, required this.hasMoreData, required this.totalCount, required this.onSongTap, required this.onSelectionChanged, required this.onMenuAction, super.key,
+    required this.songs,
+    required this.isSelectionMode,
+    required this.selectedIds,
+    required this.isLoadingMore,
+    required this.hasMoreData,
+    required this.totalCount,
+    required this.onSongTap,
+    required this.onSelectionChanged,
+    required this.onMenuAction,
+    super.key,
   });
 
   @override
@@ -47,10 +56,9 @@ class PlaylistSongsSection extends StatelessWidget {
             );
           }
 
-          // 末尾的“加载更多/已全部加载/占位”区域
           if (isLoadingMore) {
             return Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(AppStyles.spacingXL),
               color: colors.background,
               child: Center(
                 child: CircularProgressIndicator(color: colors.accent),
@@ -60,15 +68,12 @@ class PlaylistSongsSection extends StatelessWidget {
 
           if (!hasMoreData && songs.isNotEmpty) {
             return Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(AppStyles.spacingXL),
               color: colors.background,
               child: Center(
                 child: Text(
                   '已加载全部 $totalCount 首歌曲',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: colors.textSecondary,
-                  ),
+                  style: Theme.of(context).textTheme.labelMedium,
                 ),
               ),
             );
@@ -109,13 +114,16 @@ class _PlaylistSongTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Provider.of<ThemeProvider>(context).colors;
+    final textTheme = Theme.of(context).textTheme;
 
     return Container(
       decoration: BoxDecoration(
-        color: colors.background,
+        color: isPlaying
+            ? colors.accent.withValues(alpha: 0.06)
+            : colors.background,
         border: Border(
           bottom: BorderSide(
-            color: colors.border.withValues(alpha: 0.3),
+            color: colors.border.withValues(alpha: 0.15),
             width: 0.5,
           ),
         ),
@@ -133,8 +141,8 @@ class _PlaylistSongTile extends StatelessWidget {
           hoverColor: colors.card.withValues(alpha: 0.5),
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 12,
+              horizontal: AppStyles.spacingXL,
+              vertical: AppStyles.spacingM,
             ),
             child: Row(
               children: [
@@ -148,38 +156,33 @@ class _PlaylistSongTile extends StatelessWidget {
                   )
                 else
                   SizedBox(
-                    width: 40,
+                    width: 36,
                     child: Text(
                       '${index + 1}',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: colors.textSecondary,
+                      style: textTheme.labelMedium?.copyWith(
+                        color: isPlaying ? colors.accent : colors.textSecondary,
+                        fontWeight: isPlaying ? FontWeight.w700 : FontWeight.w500,
                       ),
                       textAlign: TextAlign.center,
                     ),
                   ),
-                const SizedBox(width: 16),
-                // 歌曲信息
+                const SizedBox(width: AppStyles.spacingM),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         song.title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: colors.textPrimary,
+                        style: textTheme.titleSmall?.copyWith(
+                          color: isPlaying ? colors.accent : colors.textPrimary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppStyles.spacingXS),
                       Text(
                         song.artist,
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: textTheme.labelMedium?.copyWith(
                           color: colors.textSecondary,
                         ),
                         maxLines: 1,
@@ -188,7 +191,6 @@ class _PlaylistSongTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                // 更多按钮
                 if (!isSelectionMode)
                   PopupMenuButton<String>(
                     icon: Icon(
@@ -198,7 +200,7 @@ class _PlaylistSongTile extends StatelessWidget {
                     ),
                     color: colors.surface,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: AppStyles.borderRadiusMedium,
                     ),
                     offset: const Offset(0, 40),
                     padding: EdgeInsets.zero,
@@ -216,10 +218,10 @@ class _PlaylistSongTile extends StatelessWidget {
                               children: [
                                 Icon(
                                   isFavorite ? Icons.favorite : Icons.favorite_border,
-                                  color: isFavorite ? Colors.red : colors.textPrimary,
+                                  color: isFavorite ? colors.favorite : colors.textPrimary,
                                   size: 20,
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: AppStyles.spacingM),
                                 Text(
                                   isFavorite ? '取消喜欢' : '加入喜欢',
                                   style: TextStyle(color: colors.textPrimary),
@@ -233,8 +235,8 @@ class _PlaylistSongTile extends StatelessWidget {
                         value: 'download',
                         child: Row(
                           children: [
-                            Icon(Icons.download_outlined, color: colors.textPrimary, size: 20),
-                            const SizedBox(width: 12),
+                            Icon(Icons.download_outlined, color: colors.accent, size: 20),
+                            const SizedBox(width: AppStyles.spacingM),
                             Text(
                               '下载到本地',
                               style: TextStyle(color: colors.textPrimary),
@@ -246,8 +248,8 @@ class _PlaylistSongTile extends StatelessWidget {
                         value: 'play',
                         child: Row(
                           children: [
-                            Icon(Icons.play_arrow, color: colors.textPrimary, size: 20),
-                            const SizedBox(width: 12),
+                            Icon(Icons.play_arrow, color: colors.accent, size: 20),
+                            const SizedBox(width: AppStyles.spacingM),
                             Text(
                               '播放',
                               style: TextStyle(color: colors.textPrimary),

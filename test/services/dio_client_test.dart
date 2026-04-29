@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hai_music/services/dio_client.dart';
+import 'package:hai_music/services/core/dio_client.dart';
 
 void main() {
   group('DioClient', () {

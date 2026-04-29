@@ -51,3 +51,8 @@ test_config.txt
 *_config.txt
 *.key
 *.secret
+
+### Debug / Temp files ###
+debug_screenshot*.png
+test_transfer.txt
+ui_*.xml

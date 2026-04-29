@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../services/sleep_timer_service.dart';
+import '../services/ui/sleep_timer_service.dart';
 import '../utils/logger.dart';
 
 class SleepTimerProvider extends ChangeNotifier {

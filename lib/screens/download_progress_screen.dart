@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/download_manager.dart';
+import '../services/download/download_manager.dart';
 import '../theme/app_styles.dart';
+import '../widgets/confirm_delete_dialog.dart';
 
-/// 下载进度查看页面
 class DownloadProgressScreen extends StatelessWidget {
   const DownloadProgressScreen({super.key});
 
@@ -25,11 +25,7 @@ class DownloadProgressScreen extends StatelessWidget {
           ),
           title: Text(
             '下载管理',
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(context).textTheme.headlineSmall,
           ),
           actions: [
             Consumer<DownloadManager>(
@@ -38,6 +34,12 @@ class DownloadProgressScreen extends StatelessWidget {
                   icon: Icon(Icons.more_vert, color: colors.textSecondary),
                   onSelected: (value) {
                     switch (value) {
+                      case 'pause_all':
+                        manager.pauseAll();
+                        break;
+                      case 'resume_all':
+                        manager.resumeAll();
+                        break;
                       case 'clear_completed':
                         manager.clearCompleted();
                         break;
@@ -50,6 +52,15 @@ class DownloadProgressScreen extends StatelessWidget {
                     }
                   },
                   itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'pause_all',
+                      child: Text('全部暂停'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'resume_all',
+                      child: Text('全部继续'),
+                    ),
+                    const PopupMenuDivider(),
                     const PopupMenuItem(
                       value: 'clear_completed',
                       child: Text('清除已完成'),
@@ -73,18 +84,19 @@ class DownloadProgressScreen extends StatelessWidget {
             final tasks = manager.tasks;
 
             if (tasks.isEmpty) {
-              return _buildEmptyState(colors);
+              return _buildEmptyState(context, colors);
             }
 
             return Column(
               children: [
-                // 统计信息
                 _buildStatistics(manager, colors),
-                const SizedBox(height: 8),
-                // 任务列表
+                const SizedBox(height: AppStyles.spacingS),
                 Expanded(
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppStyles.spacingL,
+                      vertical: AppStyles.spacingS,
+                    ),
                     itemCount: tasks.length,
                     itemBuilder: (context, index) {
                       final task = tasks[index];
@@ -100,7 +112,7 @@ class DownloadProgressScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState(ThemeColors colors) {
+  Widget _buildEmptyState(BuildContext context, ThemeColors colors) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -110,22 +122,15 @@ class DownloadProgressScreen extends StatelessWidget {
             size: 80,
             color: colors.textSecondary.withValues(alpha: 0.5),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppStyles.spacingL),
           Text(
             '暂无下载任务',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: colors.textPrimary,
-            ),
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppStyles.spacingS),
           Text(
             '在播放器中点击下载按钮开始下载',
-            style: TextStyle(
-              fontSize: 14,
-              color: colors.textSecondary,
-            ),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
@@ -136,8 +141,8 @@ class DownloadProgressScreen extends StatelessWidget {
     final stats = manager.getStatistics();
 
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(AppStyles.spacingL),
+      padding: const EdgeInsets.all(AppStyles.spacingL),
       decoration: BoxDecoration(
         color: colors.card,
         borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
@@ -148,9 +153,10 @@ class DownloadProgressScreen extends StatelessWidget {
         children: [
           _buildStatItem('总计', stats['total']!, colors.textPrimary, colors),
           _buildStatItem('等待', stats['waiting']!, colors.textSecondary, colors),
-          _buildStatItem('下载中', stats['downloading']!, Colors.blue, colors),
-          _buildStatItem('已完成', stats['completed']!, Colors.green, colors),
-          _buildStatItem('失败', stats['failed']!, Colors.red, colors),
+          _buildStatItem('下载中', stats['downloading']!, colors.info, colors),
+          _buildStatItem('暂停', stats['paused']!, colors.warning, colors),
+          _buildStatItem('完成', stats['completed']!, colors.success, colors),
+          _buildStatItem('失败', stats['failed']!, colors.error, colors),
         ],
       ),
     );
@@ -162,7 +168,7 @@ class DownloadProgressScreen extends StatelessWidget {
         Text(
           count.toString(),
           style: TextStyle(
-            fontSize: 24,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
             color: color,
           ),
@@ -171,7 +177,7 @@ class DownloadProgressScreen extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             color: colors.textSecondary,
           ),
         ),
@@ -186,8 +192,8 @@ class DownloadProgressScreen extends StatelessWidget {
     ThemeColors colors,
   ) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
+      padding: const EdgeInsets.all(AppStyles.spacingM),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
@@ -198,10 +204,8 @@ class DownloadProgressScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              // 状态图标
               _buildStatusIcon(task.status, colors),
               const SizedBox(width: 12),
-              // 歌曲信息
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,57 +233,83 @@ class DownloadProgressScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              // 操作按钮
               _buildActionButton(context, task, manager, colors),
             ],
           ),
-          // 进度条（仅下载中显示）
-          if (task.status == DownloadStatus.downloading) ...[
-            const SizedBox(height: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (task.status == DownloadStatus.downloading ||
+              task.status == DownloadStatus.paused) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                Text(
+                  task.status == DownloadStatus.paused ? '已暂停' : '下载中...',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: task.status == DownloadStatus.paused
+                          ? colors.warning
+                          : colors.textSecondary,
+                    ),
+                ),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (task.speedText.isNotEmpty) ...[
+                      Text(
+                        task.speedText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Text(
-                      '下载中...',
+                      task.progressText,
                       style: TextStyle(
                         fontSize: 12,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      '${(task.progress * 100).toStringAsFixed(0)}%',
-                      style: const TextStyle(
-                        fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.blue,
+                        color: colors.info,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: task.progress,
-                    backgroundColor: colors.border.withValues(alpha: 0.3),
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
-                    minHeight: 6,
-                  ),
-                ),
               ],
             ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: task.progress,
+                backgroundColor: colors.border.withValues(alpha: 0.3),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  task.status == DownloadStatus.paused ? colors.warning : colors.info,
+                ),
+                minHeight: 6,
+              ),
+            ),
+            if (task.status == DownloadStatus.downloading &&
+                task.remainingTime != '--:--') ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '剩余 ${task.remainingTime}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
           ],
-          // 错误信息（失败时显示）
           if (task.status == DownloadStatus.failed && task.errorMessage != null) ...[
             const SizedBox(height: 8),
             Text(
               task.errorMessage!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: Colors.red,
+                color: colors.error,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -301,15 +331,19 @@ class DownloadProgressScreen extends StatelessWidget {
         break;
       case DownloadStatus.downloading:
         icon = Icons.downloading;
-        color = Colors.blue;
+        color = colors.info;
+        break;
+      case DownloadStatus.paused:
+        icon = Icons.pause_circle;
+        color = colors.warning;
         break;
       case DownloadStatus.completed:
         icon = Icons.check_circle;
-        color = Colors.green;
+        color = colors.success;
         break;
       case DownloadStatus.failed:
         icon = Icons.error;
-        color = Colors.red;
+        color = colors.error;
         break;
       case DownloadStatus.cancelled:
         icon = Icons.cancel;
@@ -328,25 +362,73 @@ class DownloadProgressScreen extends StatelessWidget {
   ) {
     switch (task.status) {
       case DownloadStatus.waiting:
-        return IconButton(
-          icon: Icon(Icons.close, color: colors.textSecondary, size: 20),
-          onPressed: () => manager.cancelDownload(task.id),
-          tooltip: '取消',
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(Icons.pause, color: colors.warning, size: 20),
+              onPressed: () => manager.pauseDownload(task.id),
+              tooltip: '暂停',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            IconButton(
+              icon: Icon(Icons.close, color: colors.textSecondary, size: 20),
+              onPressed: () => manager.cancelDownload(task.id),
+              tooltip: '取消',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
         );
       case DownloadStatus.downloading:
-        return const SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(Icons.pause, color: colors.warning, size: 20),
+              onPressed: () => manager.pauseDownload(task.id),
+              tooltip: '暂停',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            IconButton(
+              icon: Icon(Icons.close, color: colors.textSecondary, size: 20),
+              onPressed: () => manager.cancelDownload(task.id),
+              tooltip: '取消',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
+        );
+      case DownloadStatus.paused:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(Icons.play_arrow, color: colors.info, size: 22),
+              onPressed: () => manager.resumeDownload(task.id),
+              tooltip: '继续',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            IconButton(
+              icon: Icon(Icons.close, color: colors.textSecondary, size: 20),
+              onPressed: () => manager.cancelDownload(task.id),
+              tooltip: '取消',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
         );
       case DownloadStatus.failed:
         return IconButton(
-          icon: const Icon(Icons.refresh, color: Colors.orange, size: 20),
+          icon: Icon(Icons.refresh, color: colors.warning, size: 20),
           onPressed: () => manager.retryDownload(task.id),
           tooltip: '重试',
         );
       case DownloadStatus.completed:
-        return const Icon(Icons.done, color: Colors.green, size: 20);
+        return Icon(Icons.done, color: colors.success, size: 20);
       case DownloadStatus.cancelled:
         return Icon(Icons.cancel, color: colors.textSecondary, size: 20);
     }
@@ -357,33 +439,17 @@ class DownloadProgressScreen extends StatelessWidget {
     DownloadManager manager,
     ThemeColors colors,
   ) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: colors.card,
-        title: Text('清除所有任务', style: TextStyle(color: colors.textPrimary)),
-        content: Text(
-          '确定要清除所有下载任务吗？',
-          style: TextStyle(color: colors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('取消', style: TextStyle(color: colors.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              manager.clearAll();
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('清除'),
-          ),
-        ],
-      ),
-    );
+    ConfirmDeleteDialog.show(
+      context,
+      type: ConfirmDeleteType.batch,
+      title: '清除所有任务',
+      message: '确定要清除所有下载任务吗？',
+      confirmText: '清除',
+      icon: Icons.clear_all_rounded,
+    ).then((confirmed) {
+      if (confirmed == true) {
+        manager.clearAll();
+      }
+    });
   }
 }

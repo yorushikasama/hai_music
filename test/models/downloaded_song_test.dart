@@ -58,10 +58,11 @@ void main() {
     });
 
     group('SongSource', () {
-      test('should have downloaded and local values', () {
-        expect(SongSource.values.length, 2);
+      test('should have downloaded, local and recovered values', () {
+        expect(SongSource.values.length, 3);
         expect(SongSource.values, contains(SongSource.downloaded));
         expect(SongSource.values, contains(SongSource.local));
+        expect(SongSource.values, contains(SongSource.recovered));
       });
     });
 

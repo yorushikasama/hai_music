@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hai_music/services/sleep_timer_service.dart';
+import 'package:hai_music/services/ui/sleep_timer_service.dart';
 
 void main() {
   group('SleepTimerService', () {

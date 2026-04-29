@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,9 +7,12 @@ import 'package:provider/provider.dart';
 import '../models/storage_config.dart';
 import '../providers/favorite_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/clipboard_config_parser.dart';
+import '../services/favorite/clipboard_config_parser.dart';
 import '../theme/app_styles.dart';
+import '../utils/snackbar_util.dart';
 import '../widgets/draggable_window_area.dart';
+import 'storage/storage_config_dialogs.dart';
+import 'storage/storage_config_form_builder.dart';
 
 /// 存储配置界面
 class StorageConfigScreen extends StatefulWidget {
@@ -20,7 +24,7 @@ class StorageConfigScreen extends StatefulWidget {
 
 class _StorageConfigScreenState extends State<StorageConfigScreen> {
   final _formKey = GlobalKey<FormState>();
-  
+
   late TextEditingController _supabaseUrlController;
   late TextEditingController _supabaseKeyController;
   late TextEditingController _r2EndpointController;
@@ -29,7 +33,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
   late TextEditingController _r2BucketController;
   late TextEditingController _r2RegionController;
   late TextEditingController _r2CustomDomainController;
-  
+
   bool _enableSync = false;
   bool _isLoading = false;
   bool _obscureSupabaseKey = true;
@@ -40,7 +44,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
   void initState() {
     super.initState();
     _initControllers();
-    _loadConfig();
+    unawaited(_loadConfig());
   }
 
   void _initControllers() {
@@ -57,7 +61,7 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
   Future<void> _loadConfig() async {
     final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
     final config = await favoriteProvider.favoriteManager.getConfigAsync();
-    
+
     setState(() {
       _supabaseUrlController.text = config.supabaseUrl;
       _supabaseKeyController.text = config.supabaseAnonKey;
@@ -86,45 +90,30 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
 
   Future<void> _importFromClipboard() async {
     try {
-      // 读取粘贴板内容
       final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
       if (clipboardData == null || clipboardData.text == null || clipboardData.text!.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('粘贴板为空'),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          AppSnackBar.showWithContext(context, '粘贴板为空', type: SnackBarType.warning);
         }
         return;
       }
 
       final clipboardText = clipboardData.text!;
-      
-      // 验证配置格式
+
       if (!ClipboardConfigParser.validateConfigText(clipboardText)) {
-        if (mounted) {
-          _showImportHelpDialog();
-        }
+        if (mounted) StorageConfigDialogs.showImportHelpDialog(context);
         return;
       }
 
-      // 解析配置
       final config = ClipboardConfigParser.parseConfig(clipboardText);
       if (config == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('无法解析配置，请检查格式'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          AppSnackBar.showWithContext(context, '无法解析配置，请检查格式', type: SnackBarType.error);
         }
         return;
       }
 
-      final confirmed = await _showImportConfirmDialog(config);
+      final confirmed = await StorageConfigDialogs.showImportConfirmDialog(context, config);
       if (confirmed != true) return;
 
       setState(() {
@@ -139,85 +128,17 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ 配置导入成功！请检查后保存'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppSnackBar.showWithContext(context, '配置导入成功，请检查后保存', type: SnackBarType.success);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('导入失败: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppSnackBar.showWithContext(context, '导入失败：$e', type: SnackBarType.error);
       }
     }
   }
 
-  void _showImportHelpDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('配置格式说明'),
-        content: SingleChildScrollView(
-          child: Text(
-            ClipboardConfigParser.generateExample(),
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<bool?> _showImportConfirmDialog(StorageConfig config) {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认导入配置'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('将从剪贴板导入以下配置：'),
-            const SizedBox(height: 12),
-            Text('Supabase URL: ${config.supabaseUrl}', style: const TextStyle(fontSize: 13)),
-            Text('R2 Endpoint: ${config.r2Endpoint}', style: const TextStyle(fontSize: 13)),
-            Text('Bucket: ${config.r2BucketName}', style: const TextStyle(fontSize: 13)),
-            const SizedBox(height: 12),
-            const Text(
-              '⚠️ 请确认配置来源可信，错误的配置可能导致数据异常。',
-              style: TextStyle(fontSize: 12, color: Colors.orange),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认导入'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _saveConfig() async {
     if (!_formKey.currentState!.validate()) return;
-
-    // 防止重复点击
     if (_isLoading) return;
 
     setState(() => _isLoading = true);
@@ -231,14 +152,13 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
         r2SecretKey: _r2SecretKeyController.text.trim(),
         r2BucketName: _r2BucketController.text.trim(),
         r2Region: _r2RegionController.text.trim(),
-        r2CustomDomain: _r2CustomDomainController.text.trim().isEmpty 
-            ? null 
+        r2CustomDomain: _r2CustomDomainController.text.trim().isEmpty
+            ? null
             : _r2CustomDomainController.text.trim(),
         enableSync: _enableSync,
       );
 
       final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
-      
       final success = await favoriteProvider.favoriteManager.updateConfig(config);
 
       if (!mounted) return;
@@ -250,62 +170,24 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
           await favoriteProvider.refreshFavoriteSongs();
         }
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('✅ 配置保存成功'),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-        
-        // 延迟一下再返回，让用户看到成功提示
+        AppSnackBar.showWithContext(context, '配置保存成功', type: SnackBarType.success);
+
         await Future<void>.delayed(const Duration(milliseconds: 500));
-        if (mounted) {
-          Navigator.pop(context);
-        }
+        if (mounted) Navigator.pop(context);
       } else {
-        // 保存失败，显示错误提示
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text('❌ 配置保存失败，请重试'),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
+        AppSnackBar.showWithContext(
+          context,
+          '配置保存失败，请重试',
+          type: SnackBarType.error,
+          duration: const Duration(seconds: 3),
         );
       }
     } catch (e) {
       if (!mounted) return;
-      
+
       setState(() => _isLoading = false);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('保存配置时发生错误: $e'),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
+
+      AppSnackBar.showWithContext(context, '保存配置时发生错误：$e', type: SnackBarType.error);
     }
   }
 
@@ -334,315 +216,203 @@ class _StorageConfigScreenState extends State<StorageConfigScreen> {
               ),
             ),
             actions: [
-          if (_isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              if (_isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else ...[
+                IconButton(
+                  icon: Icon(Icons.content_paste, color: colors.accent),
+                  onPressed: _importFromClipboard,
+                  tooltip: '从粘贴板导入',
                 ),
-              ),
-            )
-          else ...[
-            IconButton(
-              icon: Icon(Icons.content_paste, color: colors.accent),
-              onPressed: _importFromClipboard,
-              tooltip: '从粘贴板导入',
-            ),
-            TextButton(
-              onPressed: _saveConfig,
-              child: Text(
-                '保存',
-                style: TextStyle(
-                  color: colors.accent,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                TextButton(
+                  onPressed: _saveConfig,
+                  child: Text(
+                    '保存',
+                    style: TextStyle(
+                      color: colors.accent,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
             ],
           ),
         ),
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppStyles.spacingL),
-          children: [
-            // 启用同步开关
-            Container(
-              padding: const EdgeInsets.all(AppStyles.spacingM),
-              decoration: AppStyles.glassDecoration(
-                color: colors.surface,
-                opacity: 0.8,
-                borderColor: colors.border,
-                isLight: colors.isLight,
-              ),
-              child: SwitchListTile(
-                title: Text(
-                  '启用云端同步',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: Text(
-                  '收藏的歌曲将自动同步到云端',
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-                value: _enableSync,
-                // 🔧 优化:使用 activeTrackColor 替代已弃用的 activeColor
-                activeTrackColor: colors.accent,
-                onChanged: (value) {
-                  setState(() => _enableSync = value);
-                },
-              ),
-            ),
-            const SizedBox(height: AppStyles.spacingL),
-
-            // Supabase 配置
-            _buildSectionTitle('Supabase 数据库配置', colors),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _supabaseUrlController,
-              label: 'Supabase URL',
-              hint: 'https://xxx.supabase.co',
-              colors: colors,
-              validator: (value) {
-                if (_enableSync && (value == null || value.isEmpty)) {
-                  return '请输入 Supabase URL';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _supabaseKeyController,
-              label: 'Supabase Anon Key',
-              hint: '输入您的 Anon Key',
-              colors: colors,
-              obscureText: _obscureSupabaseKey,
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureSupabaseKey ? Icons.visibility_off : Icons.visibility,
-                  color: colors.textSecondary,
-                ),
-                onPressed: () {
-                  setState(() => _obscureSupabaseKey = !_obscureSupabaseKey);
-                },
-              ),
-              validator: (value) {
-                if (_enableSync && (value == null || value.isEmpty)) {
-                  return '请输入 Supabase Anon Key';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppStyles.spacingXL),
-
-            // Cloudflare R2 配置
-            _buildSectionTitle('Cloudflare R2 存储配置', colors),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _r2EndpointController,
-              label: 'R2 Endpoint',
-              hint: 'https://xxx.r2.cloudflarestorage.com',
-              colors: colors,
-              validator: (value) {
-                if (_enableSync && (value == null || value.isEmpty)) {
-                  return '请输入 R2 Endpoint';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _r2AccessKeyController,
-              label: 'Access Key ID',
-              hint: '输入 Access Key',
-              colors: colors,
-              obscureText: _obscureR2AccessKey,
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureR2AccessKey ? Icons.visibility_off : Icons.visibility,
-                  color: colors.textSecondary,
-                ),
-                onPressed: () {
-                  setState(() => _obscureR2AccessKey = !_obscureR2AccessKey);
-                },
-              ),
-              validator: (value) {
-                if (_enableSync && (value == null || value.isEmpty)) {
-                  return '请输入 Access Key';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _r2SecretKeyController,
-              label: 'Secret Access Key',
-              hint: '输入 Secret Key',
-              colors: colors,
-              obscureText: _obscureR2SecretKey,
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureR2SecretKey ? Icons.visibility_off : Icons.visibility,
-                  color: colors.textSecondary,
-                ),
-                onPressed: () {
-                  setState(() => _obscureR2SecretKey = !_obscureR2SecretKey);
-                },
-              ),
-              validator: (value) {
-                if (_enableSync && (value == null || value.isEmpty)) {
-                  return '请输入 Secret Key';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _r2BucketController,
-              label: 'Bucket 名称',
-              hint: 'my-music-bucket',
-              colors: colors,
-              validator: (value) {
-                if (_enableSync && (value == null || value.isEmpty)) {
-                  return '请输入 Bucket 名称';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _r2RegionController,
-              label: 'Region',
-              hint: 'auto',
-              colors: colors,
-            ),
-            const SizedBox(height: AppStyles.spacingM),
-            _buildTextField(
-              controller: _r2CustomDomainController,
-              label: 'R2 自定义域名（可选）',
-              hint: 'music.ysnight.cn',
-              colors: colors,
-              helperText: '在 Cloudflare R2 控制台绑定自定义域名后填写\n使用自定义域名可获得永久有效的 URL',
-            ),
-            const SizedBox(height: AppStyles.spacingXL),
-
-            // 说明文档
-            _buildInfoCard(colors),
-          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSyncSwitch(colors),
+              const SizedBox(height: AppStyles.spacingL),
+              StorageConfigFormBuilder.buildSectionTitle('Supabase 数据库配置', colors),
+              const SizedBox(height: AppStyles.spacingM),
+              _buildSupabaseFields(colors),
+              const SizedBox(height: AppStyles.spacingXL),
+              StorageConfigFormBuilder.buildSectionTitle('Cloudflare R2 存储配置', colors),
+              const SizedBox(height: AppStyles.spacingM),
+              _buildR2Fields(colors),
+              const SizedBox(height: AppStyles.spacingXL),
+              StorageConfigFormBuilder.buildInfoCard(colors),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title, ThemeColors colors) {
-    return Text(
-      title,
-      style: TextStyle(
-        color: colors.textPrimary,
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required ThemeColors colors,
-    bool obscureText = false,
-    Widget? suffixIcon,
-    String? Function(String?)? validator,
-    String? helperText,
-  }) {
+  Widget _buildSyncSwitch(ThemeColors colors) {
     return Container(
+      padding: const EdgeInsets.all(AppStyles.spacingM),
       decoration: AppStyles.glassDecoration(
         color: colors.surface,
         opacity: 0.8,
         borderColor: colors.border,
         isLight: colors.isLight,
       ),
-      child: TextFormField(
-        controller: controller,
-        obscureText: obscureText,
-        style: TextStyle(color: colors.textPrimary),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          helperText: helperText,
-          helperMaxLines: 2,
-          helperStyle: TextStyle(
-            color: colors.textSecondary.withValues(alpha: 0.7),
-            fontSize: 12,
-          ),
-          labelStyle: TextStyle(color: colors.textSecondary),
-          hintStyle: TextStyle(color: colors.textSecondary.withValues(alpha: 0.5)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: Colors.transparent,
-          contentPadding: const EdgeInsets.all(AppStyles.spacingM),
-          suffixIcon: suffixIcon,
+      child: SwitchListTile(
+        title: Text(
+          '启用云端同步',
+          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.w600),
         ),
-        validator: validator,
+        subtitle: Text(
+          '收藏的歌曲将自动同步到云端',
+          style: TextStyle(color: colors.textSecondary, fontSize: 13),
+        ),
+        value: _enableSync,
+        activeTrackColor: colors.accent,
+        onChanged: (value) => setState(() => _enableSync = value),
       ),
     );
   }
 
-  Widget _buildInfoCard(ThemeColors colors) {
-    return Container(
-      padding: const EdgeInsets.all(AppStyles.spacingM),
-      decoration: AppStyles.glassDecoration(
-        color: colors.accent,
-        opacity: 0.1,
-        borderColor: colors.accent.withValues(alpha: 0.3),
-        isLight: colors.isLight,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.info_outline, color: colors.accent, size: 20),
-              const SizedBox(width: AppStyles.spacingS),
-              Text(
-                '配置说明',
-                style: TextStyle(
-                  color: colors.accent,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppStyles.spacingM),
-          Text(
-            '1. 在 Supabase 中创建项目并获取 URL 和 Anon Key\n'
-            '2. 创建 favorite_songs 表（参考服务代码中的建议结构）\n'
-            '3. 在 Cloudflare 中创建 R2 存储桶\n'
-            '4. 生成 R2 API 令牌获取 Access Key 和 Secret Key\n'
-            '5. 启用同步后，收藏的歌曲将自动下载并上传到云端',
-            style: TextStyle(
+  Widget _buildSupabaseFields(ThemeColors colors) {
+    return Column(
+      children: [
+        StorageConfigFormBuilder.buildTextField(
+          controller: _supabaseUrlController,
+          label: 'Supabase URL',
+          hint: 'https://xxx.supabase.co',
+          colors: colors,
+          validator: (value) {
+            if (_enableSync && (value == null || value.isEmpty)) return '请输入 Supabase URL';
+            return null;
+          },
+        ),
+        const SizedBox(height: AppStyles.spacingM),
+        StorageConfigFormBuilder.buildTextField(
+          controller: _supabaseKeyController,
+          label: 'Supabase Anon Key',
+          hint: '输入您的 Anon Key',
+          colors: colors,
+          obscureText: _obscureSupabaseKey,
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscureSupabaseKey ? Icons.visibility_off : Icons.visibility,
               color: colors.textSecondary,
-              fontSize: 13,
-              height: 1.5,
             ),
+            onPressed: () => setState(() => _obscureSupabaseKey = !_obscureSupabaseKey),
           ),
-        ],
-      ),
+          validator: (value) {
+            if (_enableSync && (value == null || value.isEmpty)) return '请输入 Supabase Anon Key';
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildR2Fields(ThemeColors colors) {
+    return Column(
+      children: [
+        StorageConfigFormBuilder.buildTextField(
+          controller: _r2EndpointController,
+          label: 'R2 Endpoint',
+          hint: 'https://xxx.r2.cloudflarestorage.com',
+          colors: colors,
+          validator: (value) {
+            if (_enableSync && (value == null || value.isEmpty)) return '请输入 R2 Endpoint';
+            return null;
+          },
+        ),
+        const SizedBox(height: AppStyles.spacingM),
+        StorageConfigFormBuilder.buildTextField(
+          controller: _r2AccessKeyController,
+          label: 'Access Key ID',
+          hint: '输入 Access Key',
+          colors: colors,
+          obscureText: _obscureR2AccessKey,
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscureR2AccessKey ? Icons.visibility_off : Icons.visibility,
+              color: colors.textSecondary,
+            ),
+            onPressed: () => setState(() => _obscureR2AccessKey = !_obscureR2AccessKey),
+          ),
+          validator: (value) {
+            if (_enableSync && (value == null || value.isEmpty)) return '请输入 Access Key';
+            return null;
+          },
+        ),
+        const SizedBox(height: AppStyles.spacingM),
+        StorageConfigFormBuilder.buildTextField(
+          controller: _r2SecretKeyController,
+          label: 'Secret Access Key',
+          hint: '输入 Secret Key',
+          colors: colors,
+          obscureText: _obscureR2SecretKey,
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscureR2SecretKey ? Icons.visibility_off : Icons.visibility,
+              color: colors.textSecondary,
+            ),
+            onPressed: () => setState(() => _obscureR2SecretKey = !_obscureR2SecretKey),
+          ),
+          validator: (value) {
+            if (_enableSync && (value == null || value.isEmpty)) return '请输入 Secret Key';
+            return null;
+          },
+        ),
+        const SizedBox(height: AppStyles.spacingM),
+        StorageConfigFormBuilder.buildTextField(
+          controller: _r2BucketController,
+          label: 'Bucket 名称',
+          hint: 'my-music-bucket',
+          colors: colors,
+          validator: (value) {
+            if (_enableSync && (value == null || value.isEmpty)) return '请输入 Bucket 名称';
+            return null;
+          },
+        ),
+        const SizedBox(height: AppStyles.spacingM),
+        StorageConfigFormBuilder.buildTextField(
+          controller: _r2RegionController,
+          label: 'Region',
+          hint: 'auto',
+          colors: colors,
+        ),
+        const SizedBox(height: AppStyles.spacingM),
+        StorageConfigFormBuilder.buildTextField(
+          controller: _r2CustomDomainController,
+          label: 'R2 自定义域名（可选）',
+          hint: 'music.ysnight.cn',
+          colors: colors,
+          helperText: '在 Cloudflare R2 控制台绑定自定义域名后填写\n使用自定义域名可获得永久有效的 URL',
+        ),
+      ],
     );
   }
 }

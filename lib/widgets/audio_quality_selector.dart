@@ -5,6 +5,7 @@ import '../providers/audio_settings_provider.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_styles.dart';
+import '../utils/snackbar_util.dart';
 
 class AudioQualitySelector extends StatelessWidget {
   const AudioQualitySelector({super.key});
@@ -274,27 +275,23 @@ class AudioQualitySelector extends StatelessWidget {
     MusicProvider musicProvider,
     AudioQuality quality,
   ) async {
+    final audioSettings = Provider.of<AudioSettingsProvider>(context, listen: false);
     Navigator.pop(context);
 
-    final messenger = ScaffoldMessenger.of(context);
+    await audioSettings.setAudioQuality(quality);
 
-    await Provider.of<AudioSettingsProvider>(context, listen: false).setAudioQuality(quality);
-
-    messenger.showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(quality.icon, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Text('已切换到 ${quality.description}'),
-          ],
-        ),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: quality.color.withValues(alpha: 0.85),
-      ),
-    );
+    if (audioSettings.switchResult == QualitySwitchResult.failed) {
+      AppSnackBar.show(
+        '音质切换失败，请检查网络后重试',
+        type: SnackBarType.error,
+      );
+    } else {
+      AppSnackBar.show(
+        '已切换到${quality.description}',
+        type: SnackBarType.success,
+        icon: quality.icon,
+      );
+    }
   }
 }
 

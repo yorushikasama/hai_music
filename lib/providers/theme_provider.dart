@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 
-import '../services/preferences_service.dart';
+import '../services/core/preferences_service.dart';
 import '../theme/app_styles.dart';
 import '../utils/logger.dart';
 
 enum AppThemeMode {
-  dark(displayName: '深色', icon: '🌙'),
-  light(displayName: '浅色', icon: '☀️'),
-  purple(displayName: '紫色', icon: '💜'),
-  blue(displayName: '蓝色', icon: '💙'),
-  pink(displayName: '粉色', icon: '🌸'),
-  orange(displayName: '橙色', icon: '🍊'),
-  green(displayName: '绿色', icon: '🌿'),
-  rainbow(displayName: '彩虹', icon: '🌈');
+  dark(displayName: '深色', icon: Icons.dark_mode_outlined),
+  light(displayName: '浅色', icon: Icons.light_mode_outlined),
+  purple(displayName: '紫色', icon: Icons.auto_awesome_outlined),
+  blue(displayName: '蓝色', icon: Icons.water_drop_outlined),
+  pink(displayName: '粉色', icon: Icons.favorite_outline_rounded),
+  orange(displayName: '橙色', icon: Icons.wb_sunny_outlined),
+  green(displayName: '绿色', icon: Icons.eco_outlined),
+  rainbow(displayName: '彩虹', icon: Icons.palette_outlined);
 
   final String displayName;
-  final String icon;
+  final IconData icon;
 
   const AppThemeMode({required this.displayName, required this.icon});
 
@@ -77,8 +77,10 @@ class ThemeProvider extends ChangeNotifier {
 
   /// 设置主题并保存
   Future<void> setTheme(AppThemeMode theme) async {
+    if (_currentTheme == theme) return;
     _currentTheme = theme;
     _cachedThemeData = null;
+    final _ = themeData;
     notifyListeners();
 
     try {
@@ -96,7 +98,7 @@ class ThemeProvider extends ChangeNotifier {
     setTheme(themes[nextIndex]);
   }
 
-  String getThemeIcon(AppThemeMode theme) => theme.icon;
+  IconData getThemeIcon(AppThemeMode theme) => theme.icon;
 
   ThemeData get themeData {
     if (_cachedThemeData != null) return _cachedThemeData!;
@@ -126,9 +128,16 @@ class ThemeProvider extends ChangeNotifier {
       textTheme: TextTheme(
         headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: c.textPrimary, letterSpacing: -1),
         headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: c.textPrimary, letterSpacing: -0.5),
+        headlineSmall: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: c.textPrimary, letterSpacing: -0.3),
+        titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: c.textPrimary, letterSpacing: 0.2),
         titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary),
+        titleSmall: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary),
+        bodyLarge: TextStyle(fontSize: 16, color: c.textPrimary, fontWeight: FontWeight.w400),
         bodyMedium: TextStyle(fontSize: 15, color: c.textSecondary, fontWeight: FontWeight.w300),
         bodySmall: TextStyle(fontSize: 13, color: c.textSecondary, fontWeight: FontWeight.w300),
+        labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary, letterSpacing: 0.5),
+        labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.textSecondary, letterSpacing: 0.3),
+        labelSmall: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: c.textSecondary, letterSpacing: 0.2),
       ),
 
       // AppBar 主题
@@ -137,6 +146,7 @@ class ThemeProvider extends ChangeNotifier {
         elevation: 0,
         iconTheme: IconThemeData(color: c.textPrimary),
         titleTextStyle: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: c.textPrimary),
+        actionsPadding: EdgeInsets.zero,
       ),
 
       // NavigationBar 主题

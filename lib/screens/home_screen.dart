@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/favorite_provider.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/keyboard_shortcut_service.dart';
+import '../services/ui/keyboard_shortcut_service.dart';
 import '../theme/app_styles.dart';
 import '../utils/logger.dart';
 import '../utils/platform_utils.dart';
@@ -42,7 +42,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateToSearch(String query) {
-    Logger.debug('导航到搜索页，关键词: $query', 'HomeScreen');
     setState(() {
       _searchQuery = query;
       _searchScreenKey = UniqueKey();
@@ -53,10 +52,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final musicProvider = Provider.of<MusicProvider>(context);
+    final hasCurrentSong = context.select<MusicProvider, bool>((p) => p.currentSong != null);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final colors = themeProvider.colors;
-    final hasCurrentSong = musicProvider.currentSong != null;
     final isDesktop = Responsive.isDesktop(context);
     final isWeb = PlatformUtils.isWeb;
 
@@ -204,16 +202,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(
+                                    Icon(
                                       themeProvider.getThemeIcon(themeProvider.currentTheme),
-                                      style: const TextStyle(fontSize: 18),
+                                      size: 18,
+                                      color: colors.accent,
                                     ),
                                     const SizedBox(width: AppStyles.spacingS),
                                     Text(
                                       themeProvider.themeName,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
+                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                         color: colors.accent,
                                       ),
                                     ),
@@ -262,10 +259,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       const SizedBox(width: AppStyles.spacingS),
                                       Text(
                                         '快捷键',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
+                                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                           color: colors.textSecondary,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
@@ -310,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onKeyEvent: (node, event) {
           return KeyboardShortcutService.handleKeyEvent(
             event,
-            musicProvider,
+            Provider.of<MusicProvider>(context, listen: false),
             Provider.of<FavoriteProvider>(context, listen: false),
             context,
             onSearchRequested: () {
@@ -337,28 +333,40 @@ class _HomeScreenState extends State<HomeScreen> {
     required VoidCallback onTap,
   }) {
     final colors = Provider.of<ThemeProvider>(context).colors;
-    
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingM, vertical: AppStyles.spacingXS),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppStyles.spacingM,
+        vertical: AppStyles.spacingXS,
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingM),
+          borderRadius: AppStyles.borderRadiusSmall,
+          child: AnimatedContainer(
+            duration: AppStyles.animNormal,
+            curve: AppStyles.animCurve,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppStyles.spacingL,
+              vertical: AppStyles.spacingM,
+            ),
             decoration: BoxDecoration(
               color: isSelected
                   ? colors.accent.withValues(alpha: 0.12)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
+              borderRadius: AppStyles.borderRadiusSmall,
             ),
             child: Row(
               children: [
-                Icon(
-                  isSelected ? selectedIcon : icon,
-                  size: 22,
-                  color: isSelected ? colors.accent : colors.textSecondary,
+                AnimatedSwitcher(
+                  duration: AppStyles.animFast,
+                  child: Icon(
+                    isSelected ? selectedIcon : icon,
+                    key: ValueKey(isSelected),
+                    size: 22,
+                    color: isSelected ? colors.accent : colors.textSecondary,
+                  ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
                 Text(
@@ -453,12 +461,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: AppStyles.spacingL),
           Text(
             'Hai Music',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
+            style: Theme.of(context).textTheme.headlineSmall,
           ),
         ],
       ),

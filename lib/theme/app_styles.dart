@@ -2,27 +2,34 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-/// 统一样式常量 - 颜色、间距、圆角、阴影、模糊
 class AppStyles {
   AppStyles._();
 
-  // ============ 圆角 ============
   static const double radiusSmall = 10.0;
   static const double radiusMedium = 12.0;
   static const double radiusLarge = 16.0;
+  static const double radiusXL = 20.0;
+  static const double radiusCircle = 999.0;
 
-  // ============ 间距 ============
   static const double spacingXS = 4.0;
   static const double spacingS = 8.0;
   static const double spacingM = 12.0;
   static const double spacingL = 16.0;
   static const double spacingXL = 20.0;
+  static const double spacingXXL = 28.0;
+  static const double spacingXXXL = 40.0;
 
   static const double blurStrength = 20.0;
 
   static const double sidebarWidth = 240.0;
 
-  // ============ 阴影（根据主题亮暗自动调整） ============
+  static const Duration animFast = Duration(milliseconds: 150);
+  static const Duration animNormal = Duration(milliseconds: 250);
+  static const Duration animSlow = Duration(milliseconds: 400);
+  static const Curve animCurve = Curves.easeOutCubic;
+  static const Curve animCurveIn = Curves.easeInCubic;
+  static const Curve animCurveInOut = Curves.easeInOutCubic;
+
   static List<BoxShadow> getShadows(bool isLight) {
     return [
       BoxShadow(
@@ -38,7 +45,6 @@ class AppStyles {
     ];
   }
 
-  // ============ 毛玻璃装饰生成器 ============
   static BoxDecoration glassDecoration({
     required Color color,
     required double opacity,
@@ -54,11 +60,15 @@ class AppStyles {
     );
   }
 
-  // ============ 背景模糊滤镜 ============
   static ImageFilter get backdropBlur => ImageFilter.blur(
         sigmaX: blurStrength,
         sigmaY: blurStrength,
       );
+
+  static BorderRadius get borderRadiusSmall => BorderRadius.circular(radiusSmall);
+  static BorderRadius get borderRadiusMedium => BorderRadius.circular(radiusMedium);
+  static BorderRadius get borderRadiusLarge => BorderRadius.circular(radiusLarge);
+  static BorderRadius get borderRadiusXL => BorderRadius.circular(radiusXL);
 }
 
 /// 主题颜色配置

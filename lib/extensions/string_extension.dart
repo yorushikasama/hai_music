@@ -1,8 +1,13 @@
 extension StringExtension on String {
   String toSafeFileName() {
-    return replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'\s+'), '_')
+    return replaceAll(RegExp(r'[<>:"/\\|?*]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+  }
+
+  String toTruncated({int maxLength = 200}) {
+    if (length <= maxLength) return this;
+    return substring(0, maxLength);
   }
 }
 

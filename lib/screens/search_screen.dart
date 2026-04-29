@@ -8,12 +8,14 @@ import '../models/song.dart';
 import '../providers/favorite_provider.dart';
 import '../providers/music_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/download_manager.dart';
-import '../services/music_api_service.dart';
-import '../services/preferences_service.dart';
+import '../repositories/music_repository.dart';
+import '../services/download/download_service.dart';
+import '../services/core/preferences_service.dart';
 import '../theme/app_styles.dart';
 import '../utils/logger.dart';
 import '../utils/platform_utils.dart';
+import '../utils/download_utils.dart';
+import '../utils/snackbar_util.dart';
 import '../widgets/draggable_window_area.dart';
 import 'download_progress_screen.dart';
 import 'search/search_header.dart';
@@ -31,7 +33,7 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  static final MusicApiService _apiService = MusicApiService();
+  static final _repository = MusicRepository();
   List<Song> _searchResults = [];
   List<String> _searchHistory = [];
   bool _isSearching = false;
@@ -54,7 +56,6 @@ class _SearchScreenState extends State<SearchScreen> {
     
     // 如果有初始搜索词，自动执行搜索
     if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
-      Logger.debug('📝 SearchScreen initState: ${widget.initialQuery}');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _searchController.text = widget.initialQuery!;
         _performSearch(widget.initialQuery!);
@@ -69,7 +70,6 @@ class _SearchScreenState extends State<SearchScreen> {
     if (widget.initialQuery != null && 
         widget.initialQuery!.isNotEmpty && 
         widget.initialQuery != oldWidget.initialQuery) {
-      Logger.debug('📝 SearchScreen didUpdateWidget: ${widget.initialQuery}');
       _searchController.text = widget.initialQuery!;
       _performSearch(widget.initialQuery!);
     }
@@ -101,7 +101,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _loadSearchHistory() async {
     try {
       final prefs = PreferencesService();
-      final history = prefs.getSearchHistory();
+      final history = await prefs.getSearchHistory();
       if (mounted) {
         setState(() {
           _searchHistory = history;
@@ -163,9 +163,6 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 执行搜索（第一页）
   Future<void> _performSearch(String query) async {
     if (query.trim().isEmpty) return;
-    
-    Logger.debug('🔎 执行搜索: $query');
-
     setState(() {
       _isSearching = true;
       _currentQuery = query.trim();
@@ -175,7 +172,7 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
-      final results = await _apiService.searchSongs(
+      final results = await _repository.searchSongs(
         keyword: _currentQuery,
       );
 
@@ -199,11 +196,10 @@ class _SearchScreenState extends State<SearchScreen> {
               _isSearching = false;
               _hasMore = false;
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('搜索失败: $message'),
-                behavior: SnackBarBehavior.floating,
-              ),
+            AppSnackBar.showWithContext(
+              context,
+              '搜索失败：$message',
+              type: SnackBarType.error,
             );
           },
         );
@@ -215,11 +211,10 @@ class _SearchScreenState extends State<SearchScreen> {
           _isSearching = false;
           _hasMore = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('搜索失败: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppSnackBar.showWithContext(
+          context,
+          '搜索失败：$e',
+          type: SnackBarType.error,
         );
       }
     }
@@ -237,7 +232,7 @@ class _SearchScreenState extends State<SearchScreen> {
     
     try {
       final nextPage = _currentPage + 1;
-      final results = await _apiService.searchSongs(
+      final results = await _repository.searchSongs(
         keyword: _currentQuery,
         page: nextPage,
       );
@@ -256,11 +251,10 @@ class _SearchScreenState extends State<SearchScreen> {
             setState(() {
               _isLoadingMore = false;
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('加载更多失败: $message'),
-                behavior: SnackBarBehavior.floating,
-              ),
+            AppSnackBar.showWithContext(
+              context,
+              '加载更多失败：$message',
+              type: SnackBarType.error,
             );
           },
         );
@@ -270,11 +264,10 @@ class _SearchScreenState extends State<SearchScreen> {
         setState(() {
           _isLoadingMore = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载更多失败: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppSnackBar.showWithContext(
+          context,
+          '加载更多失败：$e',
+          type: SnackBarType.error,
         );
       }
     }
@@ -397,7 +390,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildSearchSuggestions(ThemeColors colors) {
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingXL),
       children: [
         // 搜索历史
         if (_searchHistory.isNotEmpty) ...[
@@ -421,10 +414,10 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppStyles.spacingM),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppStyles.spacingS,
+            runSpacing: AppStyles.spacingS,
             children: _searchHistory.map((history) {
               return ActionChip(
                 label: Text(
@@ -452,11 +445,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// 骨架屏加载效果
   Widget _buildLoadingSkeleton(ThemeColors colors) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingXL),
       itemCount: 10,
       itemBuilder: (context, index) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(bottom: AppStyles.spacingL),
           child: Shimmer.fromColors(
             baseColor: colors.card,
             highlightColor: colors.surface,
@@ -467,10 +460,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   height: 56,
                   decoration: BoxDecoration(
                     color: colors.card,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppStyles.borderRadiusSmall,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppStyles.spacingM),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,16 +473,16 @@ class _SearchScreenState extends State<SearchScreen> {
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: colors.card,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: AppStyles.borderRadiusSmall,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppStyles.spacingS),
                       Container(
                         height: 14,
                         width: 150,
                         decoration: BoxDecoration(
                           color: colors.card,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: AppStyles.borderRadiusSmall,
                         ),
                       ),
                     ],
@@ -507,60 +500,23 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _handleMenuAction(BuildContext context, String action, Song song) async {
     final musicProvider = Provider.of<MusicProvider>(context, listen: false);
     final favoriteProvider = Provider.of<FavoriteProvider>(context, listen: false);
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    
     switch (action) {
       case 'favorite':
         await favoriteProvider.toggleFavorite(song.id, currentSong: musicProvider.currentSong, playlist: musicProvider.playlist);
         if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              favoriteProvider.isFavorite(song.id)
-                  ? '已添加到我喜欢'
-                  : '已从我喜欢中移除',
-            ),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppSnackBar.showWithContext(
+          context,
+          favoriteProvider.isFavorite(song.id) ? '已添加到我喜欢' : '已从我喜欢中移除',
+          type: favoriteProvider.isFavorite(song.id) ? SnackBarType.success : SnackBarType.info,
         );
         break;
         
       case 'download':
-        final manager = DownloadManager();
-        await manager.init();
-        final success = await manager.addDownload(song);
+        final result = await DownloadService().addDownload(song);
         
         if (!mounted) return;
-        
-        if (success) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('已添加到下载队列：${song.title}'),
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-              action: SnackBarAction(
-                label: '查看',
-                onPressed: () {
-                  navigator.push(
-                    MaterialPageRoute<void>(
-                      builder: (context) => const DownloadProgressScreen(),
-                    ),
-                  );
-                },
-              ),
-            ),
-          );
-        } else {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('《${song.title}》已在下载列表中'),
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+
+        DownloadUtils.handleAddDownloadResult(context, result, song.title);
         break;
         
       case 'play':
@@ -591,12 +547,10 @@ class _SearchScreenState extends State<SearchScreen> {
       _selectedIds.clear();
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已添加 $successCount 首歌曲到我喜欢'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
+    AppSnackBar.showWithContext(
+      context,
+      '已添加 $successCount 首歌曲到我喜欢',
+      type: SnackBarType.success,
     );
   }
 
@@ -607,12 +561,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
     if (selectedSongs.isEmpty) return;
 
-    final manager = DownloadManager();
-    await manager.init();
-
-    final futures = selectedSongs.map(manager.addDownload);
-    final results = await Future.wait(futures);
-    final successCount = results.where((r) => r).length;
+    final result = await DownloadService().batchAddDownloads(selectedSongs);
 
     if (!mounted) return;
 
@@ -621,23 +570,23 @@ class _SearchScreenState extends State<SearchScreen> {
       _selectedIds.clear();
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已添加 $successCount 首歌曲到下载队列'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: '查看',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (context) => const DownloadProgressScreen(),
-              ),
-            );
-          },
-        ),
-      ),
+    final message = result.alreadyExists > 0
+        ? '已添加 ${result.added} 首歌曲到下载队列，${result.alreadyExists} 首已存在'
+        : '已添加 ${result.added} 首歌曲到下载队列';
+
+    AppSnackBar.showWithContext(
+      context,
+      message,
+      type: SnackBarType.success,
+      actionLabel: '查看',
+      onAction: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (context) => const DownloadProgressScreen(),
+          ),
+        );
+      },
     );
   }
 }
